@@ -1,5 +1,5 @@
 const HOUR=60*60*1000;
-const CACHE_KEY='frikiriam.boardgames.v1';
+const CACHE_KEY='frikiriam.boardgames.v2';
 const numericId=value=>/^[1-9]\d*$/.test(String(value??''));
 const https=value=>{try{const u=new URL(value);return u.protocol==='https:'?u.href:''}catch{return ''}};
 const languageNames={ES:'Español',GB:'Inglés',EN:'Inglés',PT:'Portugués',DE:'Alemán',FR:'Francés',IT:'Italiano',NL:'Neerlandés',DK:'Danés',SE:'Sueco',NO:'Noruego',FI:'Finés',PL:'Polaco',CZ:'Checo',JP:'Japonés',CN:'Chino'};
@@ -8,6 +8,16 @@ export function editionLabel(versions={}){
  const languages=Array.isArray(versions.lang)?versions.lang.map(code=>languageNames[code]||code):[];
  const edition=Array.isArray(versions.version)?versions.version:[];
  return [...languages,...edition].join(' · ')||'Edición sin idioma indicado';
+}
+
+// Use product prices from offers in stock. Shipping totals depend on destination.
+export function referencePrice(prices,currency,checked=Date.now()){
+ const unavailable={price:'',priceChecked:null};
+ if(!Array.isArray(prices)||!/^[A-Z]{3}$/.test(currency||''))return unavailable;
+ const amounts=prices.filter(p=>p?.stock==='Y').map(p=>typeof p.product==='number'||typeof p.product==='string'?Number(p.product):NaN).filter(p=>Number.isFinite(p)&&p>0);
+ if(!amounts.length)return unavailable;
+ const amount=Math.round(Math.min(...amounts)*100)/100;
+ return {price:new Intl.NumberFormat('es-ES',{style:'currency',currency}).format(amount),priceChecked:checked};
 }
 
 // Wikidata's BoardGameGeek identifiers restrict discovery to board games.
@@ -46,7 +56,7 @@ export function createBoardGameCatalog({fetchJson,storage=null,now=Date.now,site
    const data=await fetchJson('https://boardgameprices.co.uk/api/info?'+new URLSearchParams({eid:missing.join(','),sitename,currency:'EUR',destination:'GB',preferred_language:'ES'}));
    if(!Array.isArray(data.items))throw Error('El catálogo no ha devuelto juegos válidos');
    for(const id of missing){
-    const items=data.items.filter(x=>String(x.external_id)===id&&numericId(x.id)&&typeof x.name==='string').map(x=>({id:String(x.id),title:x.name,cover:https(x.image)||https(x.thumbnail),sourceUrl:https(x.url),versions:x.versions||{}}));
+    const items=data.items.filter(x=>String(x.external_id)===id&&numericId(x.id)&&typeof x.name==='string').map(x=>({id:String(x.id),title:x.name,cover:https(x.image)||https(x.thumbnail),sourceUrl:https(x.url),versions:x.versions||{},...referencePrice(x.prices,data.currency,now())}));
     write('game:'+id,items);
    }
   }

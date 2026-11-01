@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createBoardGameCatalog,editionLabel} from '../dist/boardgames.mjs';
+import {createBoardGameCatalog,editionLabel,referencePrice} from '../dist/boardgames.mjs';
 
 const memory=()=>{const data=new Map();return {getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)}};
 const claim=value=>({mainsnak:{datavalue:{value}}});
@@ -11,7 +11,7 @@ function fixture(){
   const u=new URL(endpoint);calls.push(u);
   if(u.searchParams.get('list')==='search')return {query:{search:[{title:'Q17271'},{title:'Q1903'},{title:'Q1'}]}};
   if(u.searchParams.get('action')==='wbgetentities')return {entities:{Q17271:{claims:{P2339:[claim('13')]}},Q1903:{claims:{}},Q1:{claims:{P2339:[claim('bad-id'),{...claim('999'),rank:'deprecated'}]}}}};
-  return {items:[item(949,'13','GB'),item(32086,'13','ES','Colonos de Catán'),item(20,'20','ES','Otro juego'),{...item(30,'13','ES'),image:'javascript:alert(1)'},{...item(31,'13','ES'),url:'http://example.org'}]};
+  return {currency:'EUR',items:[item(949,'13','GB'),{...item(32086,'13','ES','Colonos de Catán'),prices:[{stock:'Y',product:44.64,price:55.88,shipping:11.24}]},item(20,'20','ES','Otro juego'),{...item(30,'13','ES'),image:'javascript:alert(1)'},{...item(31,'13','ES'),url:'http://example.org'}]};
  };
  return {calls,fetchJson};
 }
@@ -25,8 +25,20 @@ test('solo consulta identificadores válidos de juegos y prioriza la edición es
  assert.deepEqual(results.map(x=>x.id),['32086','949']);
  assert.equal(results[0].subtitle,'Español');
  assert.equal(results[0].provider,'BoardGamePrices');
+ assert.match(results[0].price,/44,64\s*€/);
+ assert.equal(results[1].price,'');
  assert.match(results[0].sourceUrl,/boardgameprices/);
  assert.ok(f.calls.every(u=>!u.hostname.includes('boardgamegeek')));
+});
+
+test('el precio de referencia es el menor producto disponible, sin mezclar envío ni tasas',()=>{
+ const result=referencePrice([{stock:'N',product:1},{stock:'P',product:2},{stock:'?',product:3},{stock:'Y',product:35,price:36,shipping:1},{stock:'Y',product:'29.99',price:80,shipping:50,shipping_known:false},{stock:'Y',product:-10},{stock:'Y',product:'invalid'},{stock:'Y',product:0},{stock:'Y',product:null}],'EUR',123);
+ assert.match(result.price,/29,99\s*€/);
+ assert.equal(result.priceChecked,123);
+ assert.deepEqual(referencePrice([{stock:'N',product:10}],'EUR'),{price:'',priceChecked:null});
+ assert.deepEqual(referencePrice([{stock:'Y',product:10}],''),{price:'',priceChecked:null});
+ assert.deepEqual(referencePrice(undefined,'EUR'),{price:'',priceChecked:null});
+ assert.match(referencePrice([{stock:'Y',product:0.1+0.2}],'EUR').price,/0,30\s*€/);
 });
 
 test('reutiliza la caché durante una hora incluso después de reabrir la aplicación',async()=>{
