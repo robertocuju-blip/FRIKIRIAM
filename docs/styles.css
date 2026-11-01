@@ -125,3 +125,32 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulati
 .catalog-credit a{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
 .catalog-credit img,.provider-logo{width:106px;height:auto;object-fit:contain;vertical-align:middle;background:#526249;padding:3px;border-radius:3px}
 .provider-logo{width:90px;height:auto}
+/* Both collection layouts use the same records, actions and creation order. */
+.collection-options{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:-4px 0 16px}
+.collection-options .collection-caption{margin:0}
+.view-switch{display:flex;gap:3px;padding:3px;background:#eeeee5;border:1px solid var(--line);border-radius:6px}
+.view-switch button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:7px 10px;border:0;border-radius:4px;background:transparent;color:var(--muted);font-size:11px}
+.view-switch button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px #283d3314}
+.view-switch .icon{width:15px;height:15px}
+.library-list.is-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:18px;align-items:stretch}
+.library-list.is-grid .library-row{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:hidden}
+.library-list.is-grid .row-cover{width:100%;height:240px;flex-shrink:0;border-radius:0;border-bottom:1px solid var(--line)}
+.library-list.is-grid .row-info{padding:16px 16px 12px}
+.library-list.is-grid .row-info h3{font:20px/1.3 var(--serif);margin:10px 0 8px}
+.library-list.is-grid .row-info p{font-size:11px}
+.library-list.is-grid .row-actions{margin-top:auto;padding:0 16px 16px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.library-list.is-grid .row-actions .btn{width:100%;min-height:40px;font-size:11px;padding:9px 10px}
+@media(max-width:800px){
+ .library-list.is-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+ .library-list.is-grid .row-cover{height:210px}
+ .library-list.is-grid .row-info{padding:13px 12px 10px}
+ .library-list.is-grid .row-info h3{font-size:18px}
+ .library-list.is-grid .row-actions{padding:0 12px 13px}
+}
+@media(max-width:480px){
+ .library-list.is-grid .row-cover{height:195px}
+ .library-list.is-grid .row-info h3{font-size:17px}
+ .library-list.is-grid .row-info p{font-size:10px}
+ .library-list.is-grid .row-actions .btn{font-size:10px;padding:8px 6px}
+ .view-switch button{min-height:40px}
+}
