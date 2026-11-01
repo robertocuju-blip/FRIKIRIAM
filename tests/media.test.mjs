@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mediaStatus,mergeCatalog,toKatakana} from '../dist/media.mjs';
+import {mediaStatus,mergeCatalog,normalizeLibrary,newestFirst} from '../dist/media.mjs';
 
 const episode = {id:'manual-first',season:1,number:1,title:'Apunte manual',airdate:'',watched:true,rating:5,notes:'Conservar esta impresión.'};
 const series = () => ({id:'series',category:'Anime',title:'Mi título',notes:'Mis notas',rating:4,cover:'https://example.com/personal.jpg',episodes:[{...episode}],status:'Visto'});
@@ -40,8 +40,24 @@ test('los filtros distinguen pendientes, viendo, vistos y películas antiguas ya
  assert.throws(()=>mergeCatalog({...series(),category:'Película'},{status:'Ended'},[]));
 });
 
-test('el nombre admite conversión de hiragana y katakana de anchura media',()=>{
- assert.equal(toKatakana('ろべると'),'ロベルト');
- assert.equal(toKatakana('ﾛﾍﾞﾙﾄ'),'ロベルト');
- assert.equal(toKatakana('ロベルト・アナ'),'ロベルト・アナ');
+test('las copias anteriores conservan colecciones y sesiones con un perfil de solo nombre',()=>{
+ const session={started:10,ended:20,duration:10,page:12};
+ const previous={version:1,profile:{name:'Ana',grade:'1º Dan',katakana:'legacy'},techniques:[{id:'old'}],books:[{id:'first',title:'Primer libro',sessions:[session]},{id:'second',title:'Segundo libro',sessions:[]}],shows:[series()],games:[{id:'game',notes:'Mi partida'}],activeSession:null};
+ const migrated=normalizeLibrary(previous);
+ assert.deepEqual(migrated.profile,{name:'Ana'});
+ assert.equal(migrated.version,2);
+ assert.equal('techniques' in migrated,false);
+ assert.deepEqual(migrated.books[0].sessions,[session]);
+ assert.equal(migrated.shows[0].episodes[0].notes,episode.notes);
+ assert.equal(migrated.games[0].notes,'Mi partida');
+ assert.deepEqual(newestFirst(migrated.books).map(x=>x.id),['second','first']);
+ assert.deepEqual(normalizeLibrary(migrated),migrated);
+});
+
+test('la lista ordena por alta, no por edición, sin cambiar el array almacenado',()=>{
+ const records=[{id:'old',addedAt:1},{id:'new',addedAt:1000},{id:'middle',addedAt:2}];
+ const ordered=newestFirst(records);
+ assert.deepEqual(ordered.map(x=>x.id),['new','middle','old']);
+ assert.deepEqual(records.map(x=>x.id),['old','new','middle']);
+ assert.deepEqual(newestFirst([{id:'first',addedAt:5},{id:'second',addedAt:5}]).map(x=>x.id),['second','first']);
 });

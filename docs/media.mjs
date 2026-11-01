@@ -31,6 +31,12 @@ export function mergeCatalog(item, show, incoming, now = Date.now()) {
   return {item:updated, added};
 }
 
-export function toKatakana(value) {
-  return value.normalize('NFKC').replace(/[\u3041-\u3096]/g, char => String.fromCharCode(char.charCodeAt(0) + 0x60));
+// Array position is the only reliable creation order in older backups.
+export function normalizeLibrary(data) {
+  const collection = items => items.map((item,index) => ({...item,addedAt:Number.isFinite(item.addedAt) && item.addedAt > 0 ? item.addedAt : index + 1}));
+  return {version:2,profile:{name:data.profile.name},books:collection(data.books),shows:collection(data.shows),games:collection(data.games),activeSession:data.activeSession};
+}
+
+export function newestFirst(items) {
+  return items.map((item,index)=>({item,index})).sort((a,b)=>(b.item.addedAt||0)-(a.item.addedAt||0)||b.index-a.index).map(entry=>entry.item);
 }
