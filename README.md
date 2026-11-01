@@ -30,7 +30,8 @@ El contenido introducido por cada persona, incluidos títulos en otros idiomas, 
 
 - [Google Books](https://developers.google.com/books/docs/v1/reference/volumes) y [Open Library](https://openlibrary.org/dev/docs/api/search): búsqueda bibliográfica y portadas. Los precios son opcionales y de referencia, según la edición y el mercado que ofrezca la fuente.
 - [TVmaze](https://www.tvmaze.com/api): portadas, episodios y emisión. Datos bajo [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); la interfaz enlaza a la fuente. La actualización conjunta espacia peticiones y reintenta respuestas 429. Es necesario mantener abierta la aplicación hasta finalizar.
-- [Wikipedia](https://www.mediawiki.org/wiki/Extension:PageImages): imágenes para películas y juegos, con enlace a la fuente. La miniatura puede representar una caja, un cartel o una imagen relacionada; hay que revisarla antes de elegir.
+- [BoardGamePrices](https://boardgameprices.co.uk/api/plugin): portadas de juegos y ediciones, con preferencia por el español. La búsqueda usa identificadores de juegos de [Wikidata](https://www.wikidata.org/wiki/Property:P2339) y consulta las imágenes en BoardGamePrices. Solo aparecen juegos vinculados a ambos catálogos; si no hay coincidencia se mantiene la entrada manual. No requiere cuenta, clave ni aprobación. Las consultas se guardan en caché durante una hora (persistente si el navegador permite almacenamiento), con logo y enlace a la fuente. No se utiliza la API de BoardGameGeek ni un proxy externo.
+- [Wikipedia](https://www.mediawiki.org/wiki/Extension:PageImages): imágenes para películas, con enlace a la fuente. La miniatura puede representar un cartel o una imagen relacionada; hay que revisarla antes de elegir.
 
 Los títulos buscados se envían al catálogo seleccionado. Las portadas y las fuentes tipográficas externas necesitan conexión. Los catálogos pueden fallar por cobertura o límites: se conserva la entrada manual. Elegir otra portada para un registro existente conserva su título, notas y progreso. Para las series manuales, vincular el catálogo de capítulos es una opción explícita e independiente.
 
@@ -42,9 +43,9 @@ Sin dependencias de ejecución ni compilación. `dist/` contiene la aplicación 
 python -m http.server 4173 --directory dist
 node --check dist/app.js
 node --check dist/sw.js
-node --test tests/media.test.mjs
+node --test tests/*.test.mjs
 ```
 
-Las pruebas verifican la conservación de progreso y notas al actualizar el catálogo, la compatibilidad de las copias, los estados y el orden por alta. La aplicación usa rutas relativas para funcionar bajo `/FRIKIRIAM/` y requiere HTTPS para la instalación y el service worker.
+Las pruebas verifican la conservación de progreso y notas al actualizar el catálogo, la compatibilidad de las copias, los estados, el orden por alta y la búsqueda de juegos con caché de una hora, selección de ediciones y recuperación tras errores. La aplicación usa rutas relativas para funcionar bajo `/FRIKIRIAM/` y requiere HTTPS para la instalación y el service worker.
 
 El paisaje y los iconos se incluyen en el repositorio. DM Sans se carga desde Google Fonts, con alternativas locales. Las portadas conservan los derechos de sus titulares.
