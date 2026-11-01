@@ -37,3 +37,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulati
  input,select,textarea,.search-input,.lookup-row input,.lookup-type select,.episode input[type=text],.episode select,.cozy input{font-size:16px!important}
 }
 @media(min-width:1500px){.hero-copy{min-height:290px}}
+/* Fade the illustration itself so its edge never forms a vertical seam. */
+.hero-art{background:none}
+.hero-art .landscape{position:absolute;right:0;top:0;height:100%;width:auto;max-width:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 28%);mask-image:linear-gradient(90deg,transparent,#000 28%)}
+.hero-art:before{z-index:1}
