@@ -2,9 +2,10 @@
 
 Aplicación web personal en español para organizar lecturas, animes y series, películas y juegos de mesa. Conserva una estética japonesa mediante el paisaje, los colores y la composición, con toda la interfaz en español.
 
-- Lecturas agrupadas en Cómics, Mangas, Libros y Novelas gráficas. Dentro de cada categoría se filtra por Pendiente, Leyendo o Leído.
+- Inicio con cuatro bloques del mismo tamaño: lecturas, animes y series, películas y juegos. Cada bloque conserva su contador y abre su colección.
+- Lecturas agrupadas en Cómics, Mangas, Libros y Novelas gráficas. Dentro de cada categoría se filtra por Pendiente, Leyendo o Leído. Sin pestaña agregada; al entrar se abre la categoría de la lectura más reciente (Cómics si aún no hay lecturas).
 - Sesiones de lectura con pantalla de concentración, cronómetro, pausa, página actual, histórico y tiempo acumulado. Notas y estrellas al terminar.
-- Animes y series con capítulos, valoraciones y comentarios. Filtros de tipo y de estado: Pendiente, Viendo y Visto.
+- Animes y series con capítulos, valoraciones y comentarios. Categorías directas Animes / Series y filtros de estado: Pendiente, Viendo y Visto. Al entrar se abre el tipo del título más reciente (Animes si aún no hay títulos). La fecha indica «Catálogo actualizado a…».
 - Actualización conjunta de todos los títulos vinculados a TVmaze, con progreso, gestión de errores y conservación de capítulos vistos y notas. Los registros manuales pueden vincularse desde Detalles.
 - Películas separadas, con Pendiente o Vista y valoración de la película completa.
 - Juegos con Pendiente o Jugado, notas, estrellas y precio de referencia opcional. El precio se importa del catálogo o se escribe manualmente, y aparece tanto en lista como en tarjetas.
