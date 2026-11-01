@@ -31,7 +31,7 @@ La aplicación vacía es la misma para todo el mundo; compartir el enlace no com
 
 - [Google Books](https://developers.google.com/books/docs/v1/reference/volumes): búsqueda bibliográfica y precios opcionales. Un precio no es una oferta garantizada ni necesariamente corresponde a una edición física o al mercado del lector.
 - [Open Library](https://openlibrary.org/dev/docs/api/search): búsqueda alternativa y [portadas](https://openlibrary.org/dev/docs/api/covers). No ofrece precios de venta.
-- [TVmaze](https://www.tvmaze.com/api): portadas, temporadas, episodios y estado de emisión. Datos sujetos a [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); la interfaz enlaza a la fuente de cada serie importada. No se redistribuye un catálogo precargado. Las películas pueden importar título e imagen desde Wikipedia; su seguimiento se registra como una única entrada.
+- [TVmaze](https://www.tvmaze.com/api): portadas, temporadas, episodios y estado de emisión. Datos sujetos a [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); la interfaz enlaza a la fuente de cada serie importada. No se redistribuye un catálogo precargado. Las películas pueden importar título e imagen desde Wikipedia. Tienen una pestaña propia y solo dos estados: Pendiente y Vista, sin temporadas ni capítulos. Los registros antiguos permanecen en la misma colección de datos y conservan sus apuntes originales, accesibles desde Detalles.
 
 Los catálogos pueden fallar por conectividad, límites o cobertura. La aplicación mantiene el alta manual. El estado de emisión se refiere a la última consulta; **Actualizar catálogo** refresca la información. No se ejecutan consultas periódicas con la app cerrada. Las temporadas de TVmaze pueden diferir de la organización de una plataforma de streaming.
 
@@ -51,8 +51,24 @@ El dibujo de paisaje y los iconos se incluyen en el código fuente. Las fuentes 
 
 ## Mejoras de interfaz
 
-La cabecera muestra el nombre en katakana (o el nombre de perfil si falta) y el grado con su nombre japonés. Los valores de grado guardados y las copias anteriores siguen siendo compatibles. Las expresiones japonesas de la interfaz tienen significado y muestran su traducción al pasar el cursor.
+La cabecera muestra el logo y el nombre de FRIKIRIAM a la izquierda y el nombre en katakana (o el nombre de perfil si falta) con su grado a la derecha. Los valores de grado guardados y las copias anteriores siguen siendo compatibles. Las expresiones japonesas de la interfaz tienen significado y muestran su traducción al pasar el cursor.
 
 En pantallas móviles o con puntero táctil, los campos usan al menos 16 px para evitar el zoom de enfoque de Safari. `touch-action: manipulation` elimina el zoom accidental por doble toque y conserva el gesto de pellizcar. No se limita la escala máxima del viewport. La comprobación en iPhone físico sigue siendo necesaria.
 
 La búsqueda de portadas está disponible tanto al añadir como al editar lecturas, animes, series, películas y juegos. Al editar, seleccionar un resultado cambia solo la portada y su fuente; conserva título, notas, valoración, catálogo de episodios y progreso. El paisaje del inicio ocupa un único fondo continuo para evitar una unión vertical en móvil.
+
+## Catálogo conjunto, filtros y katakana
+
+En Animes y series, **Actualizar todo el catálogo** actualiza episodios y estado de emisión de todos los títulos vinculados a TVmaze, sean finalizados o en emisión. Muestra progreso y resultados por título, permite detenerse tras el título en curso y continúa si un título falla. Se espacian las consultas y se reintenta un error 429. Hay que mantener abierta la aplicación durante el proceso. No se cambian portadas elegidas, títulos personales, valoraciones ni comentarios; los capítulos manuales también se conservan.
+
+Para incluir un título añadido a mano: abrir Detalles, buscarlo, marcar **Vincular también el catálogo de episodios**, elegir el resultado correcto y guardar. Es una vinculación explícita; las actualizaciones posteriores se hacen con el botón conjunto. La búsqueda de portada por defecto continúa cambiando solo la imagen.
+
+Los filtros de series son Pendiente, Viendo y Visto, combinables con Anime o Serie. Las películas se muestran por separado con Pendiente o Vista. Se conserva el formato de las copias anteriores y los identificadores de registros.
+
+El campo katakana tiene `lang=ja`, admite el método de entrada del dispositivo y despliega un teclado japonés propio al enfocarlo. Las teclas insertan en la selección actual; incluye espacio, retroceso y conversión de hiragana. La web no puede cambiar forzosamente el idioma del teclado del sistema: en iPhone se puede cambiar con la tecla del globo si está instalado.
+
+Verificación de lógica de catálogo y conservación de datos:
+
+```sh
+node --test tests/media.test.mjs
+```
