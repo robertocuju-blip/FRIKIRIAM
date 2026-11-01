@@ -9,7 +9,7 @@ Aplicación web personal, en español, con estética japonesa. Cada navegador co
 - Lecturas: Cómics, Mangas, Libros y Novelas gráficas. Portadas, autor, precio de referencia cuando existe, estados, notas y valoración de 1 a 5 estrellas.
 - Sesiones de lectura con pantalla de concentración, pausa, reanudación, página actual, histórico y tiempo acumulado. Una sesión activa sobrevive a una recarga o al cierre del navegador; hay que pausarla para detener el reloj.
 - Animes, series y películas: episodios agrupados por temporada, visto / pendiente, estrellas y comentarios por capítulo. Importación y actualización de TVmaze, conservando el progreso. Añadido manual de temporadas y capítulos.
-- Juegos de mesa: pendiente / jugado, portada opcional, notas y estrellas.
+- Juegos de mesa: pendiente / jugado, búsqueda de imagen en Wikipedia, notas y estrellas.
 - Exportación e importación JSON con validación y confirmación antes de sustituir datos.
 - Aplicación instalable, diseño móvil y caché del cuaderno para uso sin conexión tras la primera visita.
 
@@ -31,7 +31,7 @@ La aplicación vacía es la misma para todo el mundo; compartir el enlace no com
 
 - [Google Books](https://developers.google.com/books/docs/v1/reference/volumes): búsqueda bibliográfica y precios opcionales. Un precio no es una oferta garantizada ni necesariamente corresponde a una edición física o al mercado del lector.
 - [Open Library](https://openlibrary.org/dev/docs/api/search): búsqueda alternativa y [portadas](https://openlibrary.org/dev/docs/api/covers). No ofrece precios de venta.
-- [TVmaze](https://www.tvmaze.com/api): portadas, temporadas, episodios y estado de emisión. Datos sujetos a [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); la interfaz enlaza a la fuente de cada serie importada. No se redistribuye un catálogo precargado. Las películas se registran manualmente.
+- [TVmaze](https://www.tvmaze.com/api): portadas, temporadas, episodios y estado de emisión. Datos sujetos a [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); la interfaz enlaza a la fuente de cada serie importada. No se redistribuye un catálogo precargado. Las películas pueden importar título e imagen desde Wikipedia; su seguimiento se registra como una única entrada.
 
 Los catálogos pueden fallar por conectividad, límites o cobertura. La aplicación mantiene el alta manual. El estado de emisión se refiere a la última consulta; **Actualizar catálogo** refresca la información. No se ejecutan consultas periódicas con la app cerrada. Las temporadas de TVmaze pueden diferir de la organización de una plataforma de streaming.
 
@@ -47,4 +47,12 @@ node --check dist/sw.js
 
 La ruta relativa del manifiesto y del service worker permite alojarla bajo `/FRIKIRIAM/`. GitHub Pages se configura para desplegar `docs/` desde `main`; `docs/` es una copia exacta de `dist/`. Al editar, actualizar ambos directorios. El archivo `.nojekyll` evita procesado Jekyll. Para un despliegue en otro proveedor estático, publicar `dist/` por HTTPS.
 
-El dibujo de paisaje y los iconos se incluyen en el código fuente. Las fuentes DM Sans y Noto Serif JP se cargan desde Google Fonts con alternativas locales. Las portadas conservan los derechos de sus respectivos titulares.
+El dibujo de paisaje y los iconos se incluyen en el código fuente. Las fuentes DM Sans y Noto Serif JP se cargan desde Google Fonts con alternativas locales. Las portadas conservan los derechos de sus respectivos titulares. La búsqueda de imágenes de películas y juegos usa Wikipedia en español e inglés; se muestra la fuente de la imagen elegida, que puede ser un cartel, una caja o una imagen relacionada con el título. Hay que revisar la miniatura antes de seleccionarla.
+
+## Mejoras de interfaz
+
+La cabecera muestra el nombre en katakana (o el nombre de perfil si falta) y el grado con su nombre japonés. Los valores de grado guardados y las copias anteriores siguen siendo compatibles. Las expresiones japonesas de la interfaz tienen significado y muestran su traducción al pasar el cursor.
+
+En pantallas móviles o con puntero táctil, los campos usan al menos 16 px para evitar el zoom de enfoque de Safari. `touch-action: manipulation` elimina el zoom accidental por doble toque y conserva el gesto de pellizcar. No se limita la escala máxima del viewport. La comprobación en iPhone físico sigue siendo necesaria.
+
+La búsqueda de portadas está disponible tanto al añadir como al editar lecturas, animes, series, películas y juegos. Al editar, seleccionar un resultado cambia solo la portada y su fuente; conserva título, notas, valoración, catálogo de episodios y progreso. El paisaje del inicio ocupa un único fondo continuo para evitar una unión vertical en móvil.
