@@ -38,3 +38,21 @@ export function readRecommendation(value){
   return validMessage(message)?messageOnly(message):null;
  }catch{return null;}
 }
+
+export function readSharedRecommendation(value){
+ if(typeof value!=='string'||value.length>9000)return null;
+ if(value.trim().startsWith('#rec='))return readRecommendation(value.trim());
+ // WhatsApp can copy the full message along with the link.
+ for(const candidate of value.matchAll(/https:\/\/[^\s<>"']+/g)){
+  let url;try{url=new URL(candidate[0].replace(/[),.;!?»\]]+$/,''))}catch{continue;}
+  if(url.origin+url.pathname!==appUrl)continue;
+  const message=readRecommendation(url.href);
+  if(message)return message;
+ }
+ return null;
+}
+
+export function needsInstalledAppTransfer({userAgent='',platform='',maxTouchPoints=0,standalone=false}={}){
+ const appleMobile=/iPhone|iPad|iPod/i.test(userAgent)||(platform==='MacIntel'&&maxTouchPoints>1);
+ return appleMobile&&!standalone;
+}

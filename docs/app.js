@@ -1,7 +1,7 @@
 import {isMovie,mediaStatus,mergeCatalog,normalizeLibrary,newestFirst} from './media.mjs?v=20261107-3';
 import {createBoardGameCatalog} from './boardgames.mjs?v=20261107-3';
 import {createMovieCatalog,imdbOf,movieDetails} from './movies.mjs?v=20261107-1';
-import {validMessage,recommendationLink,readRecommendation} from './recommendations.mjs?v=20261107-3';
+import {validMessage,recommendationLink,readRecommendation,readSharedRecommendation,needsInstalledAppTransfer} from './recommendations.mjs?v=20261107-4';
 import {searchBooks,bookEditions} from './books.mjs?v=20261107-1';
 import {pausedStates,isPaused,formats,validRating,yearOf,bounded,labels,groupKey,groupNames,playersLabel,completionCount,changeSeason,suggestItem,libraryStats,translatedGenres} from './library.mjs?v=20261107-1';
 let catalogStorage=null;try{catalogStorage=localStorage}catch{}
@@ -450,7 +450,7 @@ async function enrichSaved(kind){
 
 function recommendations(){
  const messages=state.recommendations||[];
- return heading('Recomendaciones.','Comparte títulos con tus amigos y guarda lo que te recomienden.')+`<div class="rec-panels"><section class="panel padded"><h2>Compartir ${japanese("共有")}</h2><p class="small">Elige un título y comparte el enlace por WhatsApp o donde prefieras. Tu amigo podrá abrirlo y guardarlo en sus recomendaciones.</p>${button('Preparar recomendación','compose-rec','primary')}</section><section class="panel padded"><h2>Recibir un enlace</h2><p class="small">Si el enlace se abrió en otro navegador, pégalo aquí para guardarlo en esta instalación.</p><form id="receive-rec-form"><label>Enlace de la recomendación<input type="text" name="link" maxlength="7200" required></label><div class="actions"><button type="submit" class="btn">Abrir enlace</button></div></form></section></div><section class="panel padded rec-history"><h2>Historial ${japanese("履歴")}</h2>${messages.length?[...messages].reverse().map(recCard).join(''):'<p class="small">Aquí aparecerán tus recomendaciones guardadas y preparadas.</p>'}</section>`;
+ return heading('Recomendaciones.','Comparte títulos con tus amigos y guarda lo que te recomienden.')+`<div class="rec-panels"><section class="panel padded"><h2>Compartir ${japanese("共有")}</h2><p class="small">Elige un título y comparte el enlace por WhatsApp o donde prefieras. Tu amigo podrá abrirlo y guardarlo en sus recomendaciones.</p>${button('Preparar recomendación','compose-rec','primary')}</section><section class="panel padded"><h2>Importar recomendación</h2><p class="small">Copia el enlace o el mensaje de WhatsApp y pégalo aquí para guardarlo junto a tu biblioteca.</p><form id="receive-rec-form"><label>Enlace o mensaje<input id="receive-rec-link" type="text" name="link" maxlength="9000" required autocomplete="off" autocapitalize="none" spellcheck="false"></label><div class="actions">${navigator.clipboard?.readText?button('Pegar enlace','paste-rec-link','primary'):''}<button type="submit" class="btn">Abrir enlace</button></div></form></section></div><section class="panel padded rec-history"><h2>Historial ${japanese("履歴")}</h2>${messages.length?[...messages].reverse().map(recCard).join(''):'<p class="small">Aquí aparecerán tus recomendaciones guardadas y preparadas.</p>'}</section>`;
 }
 function recCard(m){
  const received=m.direction==='received';
@@ -477,11 +477,22 @@ function recLink(m){
  openModal('Enlace preparado','Quien tenga este enlace podrá leer el título y tu mensaje.',`<label>Enlace de la recomendación<input id="prepared-rec-link" type="text" readonly value="${esc(link)}"></label><div class="actions">${button('Copiar enlace','copy-rec-link','subtle')}${navigator.share?button('Compartir…','share-rec-link','subtle'):''}<a class="btn primary" href="${esc(whatsapp)}" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a></div>`);
 }
 function receiveRec(value,fromLocation=false){
- const message=readRecommendation(value);
+ const message=(fromLocation?readRecommendation:readSharedRecommendation)(value);
  if(fromLocation){history.replaceState(null,'',location.pathname+location.search);go('recommendations');}
  if(!message||message.legacy){toast(message?.legacy?'Este enlace es de la versión anterior. Pide que te lo compartan de nuevo.':'El enlace de recomendación no es válido.');return;}
- if(!fromLocation)go('recommendations');
- if(state.recommendations?.some(m=>m.id===message.id&&m.direction==='received')){toast('Esta recomendación ya está guardada.');return;}
+ if(fromLocation&&needsInstalledAppTransfer({
+  userAgent:navigator.userAgent,platform:navigator.platform,maxTouchPoints:navigator.maxTouchPoints,
+  standalone:navigator.standalone===true||matchMedia('(display-mode: standalone)').matches,
+ })){showRecommendationTransfer(message);return;}
+ if(!fromLocation&&view!=='recommendations')go('recommendations');
+ showReceivedRecommendation(message);
+}
+function showRecommendationTransfer(message){
+ openModal(esc(message.title),`Recomendación de ${esc(message.name)} · ${kinds[message.kind]}`,`<p class="notes">${esc(message.note)}</p><div class="notice"><strong>Guárdala en tu app de FRIKIRIAM</strong><ol class="install-steps"><li>Copia el enlace.</li><li>Abre FRIKIRIAM desde su icono en la pantalla de inicio.</li><li>En Recomendaciones, pulsa «Pegar enlace» y guárdala.</li></ol></div><div class="actions">${button('Continuar en el navegador','continue-browser-rec','subtle')}${button('Copiar enlace para la app','copy-rec-transfer','primary')}</div><p class="small" id="rec-transfer-status" role="status"></p><div id="rec-transfer-field" hidden><label>Enlace de la recomendación<input id="rec-transfer-link" type="text" readonly value="${esc(recommendationLink(message))}"></label></div>`);
+ modal.transferRecommendation=message;
+}
+function showReceivedRecommendation(message){
+ if(state.recommendations?.some(m=>m.id===message.id&&m.direction==='received')){if(modal.open)modal.close();toast('Esta recomendación ya está guardada.');return;}
  openModal(esc(message.title),`Recomendación de ${esc(message.name)} · ${kinds[message.kind]}`,`<p class="notes">${esc(message.note)}</p><div class="actions">${button('Cancelar','close')}${button('Guardar recomendación','save-rec','primary')}</div>`);
  modal.incoming=message;
 }
@@ -534,6 +545,17 @@ document.addEventListener('click',async event=>{
  else if(action==='book-editions')showEditions(lookupResults[Number(target.dataset.index)]);
  else if(action==='book-editions-back'){lookupResults=editionBrowse.original;editionBrowse=null;paintLookup('book');}
  else if(action==='book-editions-next')showEditions(editionBrowse.item,editionBrowse.offset+20);
+ else if(action==='paste-rec-link'){
+  const form=target.closest('form'),input=$('#receive-rec-link',form);
+  try{const value=await navigator.clipboard.readText();if(form.isConnected&&!modal.open)receiveRec(value);}
+  catch{if(form.isConnected&&!modal.open){input.focus();toast('Mantén pulsado el campo y elige «Pegar».');}}
+ }
+ else if(action==='copy-rec-transfer'){
+  const input=$('#rec-transfer-link',modal),status=$('#rec-transfer-status',modal);
+  if(input&&status){try{await navigator.clipboard.writeText(input.value);status.textContent='Enlace copiado. Abre FRIKIRIAM desde la pantalla de inicio.';}
+   catch{$('#rec-transfer-field',modal)?.removeAttribute('hidden');input.focus();input.select();status.textContent='Copia el enlace seleccionado.';}}
+ }
+ else if(action==='continue-browser-rec'){if(modal.transferRecommendation)showReceivedRecommendation(modal.transferRecommendation);}
  else if(action==='copy-rec-link'||action==='share-rec-link'){
   const input=$('#prepared-rec-link');
   if(input){try{if(action==='share-rec-link'&&navigator.share)await navigator.share({title:'Recomendación de FRIKIRIAM',url:input.value});else{await navigator.clipboard.writeText(input.value);toast('Enlace copiado.');}}catch(e){if(e.name!=='AbortError'){input.focus();input.select();toast('Copia el enlace seleccionado.');}}}
@@ -554,6 +576,12 @@ document.addEventListener('click',async event=>{
  else if(action==='share'){try{if(navigator.share)await navigator.share({title:'FRIKIRIAM',text:'Tus lecturas, series, películas y juegos en un mismo lugar.',url:location.href});else{await navigator.clipboard.writeText(location.href);toast('Enlace copiado.')}}catch(e){if(e.name!=='AbortError')toast('Puedes copiar la dirección desde la barra de tu navegador.')}}
 });
 document.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.target.id==='lookup-query'){event.preventDefault();const form=$('#item-form',modal);if(form)searchCatalog(form.dataset.kind)}});
+document.addEventListener('paste',event=>{
+ if(event.target.id!=='receive-rec-link')return;
+ const value=event.clipboardData?.getData('text/plain');
+ if(!readSharedRecommendation(value))return;
+ event.preventDefault();receiveRec(value);
+});
 document.addEventListener('submit',event=>{
  if(event.target.id==='compose-rec-form'){event.preventDefault();prepareRec(event.target);}
  if(event.target.id==='receive-rec-form'){event.preventDefault();receiveRec(String(new FormData(event.target).get('link')).trim());}

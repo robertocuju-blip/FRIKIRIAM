@@ -1,7 +1,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recommendationLink,readRecommendation} from '../dist/recommendations.mjs';
+import {recommendationLink,readRecommendation,readSharedRecommendation,needsInstalledAppTransfer} from '../dist/recommendations.mjs';
 import {normalizeLibrary} from '../dist/media.mjs';
 
 const message={id:'test-rec',createdAt:Date.UTC(2026,10,7),name:'Ángela',kind:'movie',title:'El viaje de Chihiro · 千と千尋の神隠し',note:'¡Para ver juntos! 🍿'};
@@ -33,4 +33,23 @@ test('restaurar una copia anterior conserva el historial sin conservar códigos 
  assert.equal(data.exchange,undefined);
  assert.deepEqual(data.recommendations,[{...message,direction:'received'},{...message,direction:'prepared'}]);
  assert.deepEqual(normalizeLibrary(data),data);
+});
+
+test('se puede importar el mensaje completo de WhatsApp además del enlace',()=>{
+ const link=recommendationLink(message);
+ assert.deepEqual(readSharedRecommendation(link),message);
+ assert.deepEqual(readSharedRecommendation('Te recomiendo esta película 🍿\n'+link+'\n¡Que la disfrutes!'),message);
+ assert.deepEqual(readSharedRecommendation('Te recomiendo esta película ('+link+').'),message);
+ assert.deepEqual(readSharedRecommendation('https://[invalid] '+link),message);
+ assert.equal(readSharedRecommendation(link.replace('robertocuju-blip.github.io','example.org')),null);
+ assert.equal(readSharedRecommendation(null),null);
+});
+
+test('el traspaso se ofrece en el navegador de iOS, sin interrumpir a la app instalada',()=>{
+ const iphone={userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)'};
+ assert.equal(needsInstalledAppTransfer(iphone),true);
+ assert.equal(needsInstalledAppTransfer({...iphone,standalone:true}),false);
+ assert.equal(needsInstalledAppTransfer({platform:'MacIntel',maxTouchPoints:5}),true);
+ assert.equal(needsInstalledAppTransfer({platform:'MacIntel',maxTouchPoints:0}),false);
+ assert.equal(needsInstalledAppTransfer({userAgent:'Mozilla/5.0 (Android)'}),false);
 });
