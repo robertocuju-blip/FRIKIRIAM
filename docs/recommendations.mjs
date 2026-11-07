@@ -1,4 +1,5 @@
 const appUrl='https://robertocuju-blip.github.io/FRIKIRIAM/';
+const codePrefix='FRK2.';
 const kinds=new Set(['book','show','movie','game']);
 const limited=(v,max)=>typeof v==='string'&&v.length<=max;
 
@@ -19,11 +20,24 @@ export function normalizeRecommendations(messages){
  return [...unique.values()].slice(-1000);
 }
 
-export function recommendationLink(message){
+export function recommendationCode(message){
  if(!validMessage(message))throw Error('Recomendación no válida');
  const bytes=new TextEncoder().encode(JSON.stringify(messageOnly(message)));
  const token=btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
- return appUrl+'#rec=v2.'+token;
+ return codePrefix+token;
+}
+
+export function recommendationLink(message){
+ return appUrl+'#rec=v2.'+recommendationCode(message).slice(codePrefix.length);
+}
+
+function decodeRecommendation(token){
+ if(!/^[\w-]{1,7000}$/.test(token))return null;
+ try{
+  const bytes=Uint8Array.from(atob(token.replaceAll('-','+').replaceAll('_','/')),ch=>ch.charCodeAt(0));
+  const message=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  return validMessage(message)?messageOnly(message):null;
+ }catch{return null;}
 }
 
 export function readRecommendation(value){
@@ -31,17 +45,15 @@ export function readRecommendation(value){
   const url=new URL(value,appUrl), hash=url.hash;
   if(!['http:','https:'].includes(url.protocol))return null;
   if(/^#rec=FK1[-.]/.test(hash))return {legacy:true};
-  const token=hash.match(/^#rec=v2\.([\w-]{1,7000})$/)?.[1];
-  if(!token)return null;
-  const bytes=Uint8Array.from(atob(token.replaceAll('-','+').replaceAll('_','/')),ch=>ch.charCodeAt(0));
-  const message=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
-  return validMessage(message)?messageOnly(message):null;
+  return hash.startsWith('#rec=v2.')?decodeRecommendation(hash.slice('#rec=v2.'.length)):null;
  }catch{return null;}
 }
 
 export function readSharedRecommendation(value){
  if(typeof value!=='string'||value.length>9000)return null;
- if(value.trim().startsWith('#rec='))return readRecommendation(value.trim());
+ const text=value.trim();
+ if(text.startsWith(codePrefix))return decodeRecommendation(text.slice(codePrefix.length));
+ if(text.startsWith('#rec='))return readRecommendation(text);
  // WhatsApp can copy the full message along with the link.
  for(const candidate of value.matchAll(/https:\/\/[^\s<>"']+/g)){
   let url;try{url=new URL(candidate[0].replace(/[),.;!?»\]]+$/,''))}catch{continue;}

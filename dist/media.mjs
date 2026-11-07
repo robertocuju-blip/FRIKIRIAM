@@ -1,4 +1,4 @@
-import {normalizeRecommendations} from './recommendations.mjs?v=20261107-4';
+import {normalizeRecommendations} from './recommendations.mjs?v=20261107-5';
 import {isPaused} from './library.mjs?v=20261107-1';
 
 export const isMovie = item => item.category === 'Película';

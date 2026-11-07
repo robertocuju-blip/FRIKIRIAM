@@ -33,9 +33,9 @@ El contenido introducido por cada persona, incluidos títulos en otros idiomas, 
 
 ## Recomendaciones
 
-En Recomendaciones o desde una ficha, prepara un enlace y compártelo por WhatsApp, copiándolo o con el menú de compartir del dispositivo. Al abrirlo, la otra persona llega a Recomendaciones y puede guardarlo o añadir el título a su biblioteca después. En iPhone y iPad, el navegador y la app instalada conservan bibliotecas separadas. Si WhatsApp abre el enlace en el navegador, pulsa «Copiar enlace para la app», abre FRIKIRIAM desde la pantalla de inicio y pulsa «Pegar enlace» en Recomendaciones. También se puede pegar el mensaje completo de WhatsApp.
+Desde la ficha de un título, pulsa «Recomendar» y comparte su enlace por WhatsApp o por el medio que prefieras. Al abrirlo en el navegador, la otra persona pulsa «Copiar código». Luego abre FRIKIRIAM donde guarda su biblioteca y pulsa «Pegar código» en Recomendaciones. En iPhone y iPad, el navegador y la app de la pantalla de inicio guardan los datos por separado. Cada código identifica una recomendación; no hay códigos de usuario.
 
-Quien tenga el enlace puede leer el título, el nombre del remitente y el mensaje. El historial se guarda en cada dispositivo y se incluye en las copias del cuaderno. Los enlaces cifrados de la versión anterior deben volver a compartirse; las recomendaciones guardadas se conservan. GitHub Pages sirve los archivos de la aplicación.
+Quien tenga el enlace o el código puede leer el título, el nombre del remitente y el mensaje. El historial se guarda en cada dispositivo y se incluye en las copias del cuaderno. Los enlaces cifrados de la versión anterior deben volver a compartirse; las recomendaciones guardadas se conservan. GitHub Pages sirve los archivos de la aplicación.
 
 ## Catálogos
 

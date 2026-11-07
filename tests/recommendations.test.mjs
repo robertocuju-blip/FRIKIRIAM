@@ -1,7 +1,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recommendationLink,readRecommendation,readSharedRecommendation,needsInstalledAppTransfer} from '../dist/recommendations.mjs';
+import {recommendationCode,recommendationLink,readRecommendation,readSharedRecommendation,needsInstalledAppTransfer} from '../dist/recommendations.mjs';
 import {normalizeLibrary} from '../dist/media.mjs';
 
 const message={id:'test-rec',createdAt:Date.UTC(2026,10,7),name:'Ángela',kind:'movie',title:'El viaje de Chihiro · 千と千尋の神隠し',note:'¡Para ver juntos! 🍿'};
@@ -43,6 +43,14 @@ test('se puede importar el mensaje completo de WhatsApp además del enlace',()=>
  assert.deepEqual(readSharedRecommendation('https://[invalid] '+link),message);
  assert.equal(readSharedRecommendation(link.replace('robertocuju-blip.github.io','example.org')),null);
  assert.equal(readSharedRecommendation(null),null);
+});
+
+test('el código copiado de un enlace conserva la misma recomendación sin incluir una URL',()=>{
+ const link=recommendationLink(message),code=recommendationCode(readRecommendation(link));
+ assert.ok(!code.includes('://'));
+ assert.deepEqual(readSharedRecommendation(' '+code+'\n'),message);
+ assert.equal(readSharedRecommendation(code.replace(/.$/,'!')),null);
+ assert.equal(readSharedRecommendation('FRK2.'+'a'.repeat(7001)),null);
 });
 
 test('el traspaso se ofrece en el navegador de iOS, sin interrumpir a la app instalada',()=>{
