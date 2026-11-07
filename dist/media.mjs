@@ -1,3 +1,4 @@
+import {normalizeRecommendations} from './recommendations.mjs?v=20261107-3';
 import {isPaused} from './library.mjs?v=20261107-1';
 
 export const isMovie = item => item.category === 'Película';
@@ -39,7 +40,7 @@ export function mergeCatalog(item, show, incoming, now = Date.now()) {
 // Array position is the only reliable creation order in older backups.
 export function normalizeLibrary(data) {
   const collection = items => items.map((item,index) => ({...item,addedAt:Number.isFinite(item.addedAt) && item.addedAt > 0 ? item.addedAt : index + 1}));
-  return {version:2,profile:{name:data.profile.name},books:collection(data.books),shows:collection(data.shows),games:collection(data.games),activeSession:data.activeSession,...(Array.isArray(data.groups)?{groups:data.groups}:{}),...(data.exchange?{exchange:data.exchange}:{})};
+  return {version:2,profile:{name:data.profile.name},books:collection(data.books),shows:collection(data.shows),games:collection(data.games),activeSession:data.activeSession,...(Array.isArray(data.groups)?{groups:data.groups}:{}),...(Array.isArray(data.recommendations)||Array.isArray(data.exchange?.messages)?{recommendations:normalizeRecommendations(data.recommendations??data.exchange.messages)}:{})};
 }
 
 export function newestFirst(items) {

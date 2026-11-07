@@ -1,6 +1,7 @@
 const HOUR=60*60*1000;
-const CACHE_KEY='frikiriam.boardgames.v2';
+const CACHE_KEY='frikiriam.boardgames.v3';
 const numericId=value=>/^[1-9]\d*$/.test(String(value??''));
+const titleKey=value=>String(value||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const https=value=>{try{const u=new URL(value);return u.protocol==='https:'?u.href:''}catch{return ''}};
 const languageNames={ES:'Español',GB:'Inglés',EN:'Inglés',PT:'Portugués',DE:'Alemán',FR:'Francés',IT:'Italiano',NL:'Neerlandés',DK:'Danés',SE:'Sueco',NO:'Noruego',FI:'Finés',PL:'Polaco',CZ:'Checo',JP:'Japonés',CN:'Chino'};
 
@@ -38,20 +39,21 @@ export function createBoardGameCatalog({fetchJson,storage=null,now=Date.now,site
   const job=load().then(data=>{write(key,data);return data}).finally(()=>pending.delete(key));pending.set(key,job);return job;
  }
  const wikidata=params=>'https://www.wikidata.org/w/api.php?'+new URLSearchParams({format:'json',origin:'*',...params});
- async function discover(term){return remember('discovery:'+term.toLocaleLowerCase('es'),async()=>{
-  const safeTerm=term.replace(/["\\]/g,' ').replace(/\s+/g,' ').trim();if(!safeTerm)return [];
-  const found=await fetchJson(wikidata({action:'query',list:'search',srsearch:`"${safeTerm}" haswbstatement:P2339`,srnamespace:'0',srlimit:'8',srprop:''}));
+ async function discover(term,gameId=''){return remember('discovery:'+(gameId?'id='+gameId:term.toLocaleLowerCase('es')),async()=>{
+  const safeTerm=term.replace(/["\\]/g,' ').replace(/\s+/g,' ').trim();if(!safeTerm&&!gameId)return [];
+  const found=await fetchJson(wikidata({action:'query',list:'search',srsearch:gameId?'haswbstatement:P2339='+gameId:`"${safeTerm}" haswbstatement:P2339`,srnamespace:'0',srlimit:'8',srprop:''}));
   if(found.error)throw Error('No se pudo identificar el juego');
   const ids=(found.query?.search||[]).map(x=>x.title).filter(id=>/^Q\d+$/.test(id));if(!ids.length)return [];
-  const detail=await fetchJson(wikidata({action:'wbgetentities',ids:ids.join('|'),props:'claims'}));
+  const detail=await fetchJson(wikidata({action:'wbgetentities',ids:ids.join('|'),props:'claims|labels|aliases',languages:'es|en|mul'}));
   if(detail.error)throw Error('No se pudo identificar el juego');
   const matches=new Map();
   for(const id of ids){
-   const claims=detail.entities?.[id]?.claims||{};
+   const entity=detail.entities?.[id],claims=entity?.claims||{};
    const values=prop=>(claims[prop]||[]).filter(c=>c.rank!=='deprecated').sort((a,b)=>(b.rank==='preferred')-(a.rank==='preferred')).map(c=>c.mainsnak?.datavalue?.value);
    const count=prop=>values(prop).map(x=>Number(x?.amount)).find(n=>Number.isInteger(n)&&n>0&&n<=1000);
    const minPlayers=count('P1872'),maxPlayers=count('P1873');
-   for(const external of values('P2339').filter(numericId).map(String))if(!matches.has(external))matches.set(external,{id:external,...(minPlayers&&maxPlayers>=minPlayers?{minPlayers,maxPlayers}:{})});
+   const names=[...Object.values(entity?.labels||{}),...Object.values(entity?.aliases||{}).flat()].map(label=>titleKey(label?.value)).filter(Boolean);
+   for(const external of values('P2339').filter(numericId).map(String))if(!matches.has(external))matches.set(external,{id:external,names,...(minPlayers&&maxPlayers>=minPlayers?{minPlayers,maxPlayers}:{})});
   }
   return [...matches.values()].slice(0,8);
  })}
@@ -74,12 +76,34 @@ export function createBoardGameCatalog({fetchJson,storage=null,now=Date.now,site
    return [...items].filter(x=>x.cover&&x.sourceUrl).sort((a,b)=>priority(a)-priority(b)).slice(0,4).map(x=>({...x,gameId:id,provider:'BoardGamePrices',subtitle:editionLabel(x.versions)}));
   });
  }
- return async query=>{
+ const search=async query=>{
   const term=String(query).trim().replace(/\s+/g,' ').slice(0,160);if(term.length<2)return [];
   return remember('enriched:'+term.toLocaleLowerCase('es'),async()=>{
    const games=await discover(term);if(!games.length)return [];
-   const results=await editions(games.map(x=>x.id)),seen=new Set(),byId=new Map(games.map(x=>[x.id,x]));
+   const results=await editions(games.map(x=>x.id)),seen=new Set(),byId=new Map(games.map(({id,minPlayers,maxPlayers})=>[id,minPlayers?{minPlayers,maxPlayers}:{}]));
    return results.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true}).map(x=>({...byId.get(x.gameId),...x}));
   });
  };
+ search.players=async (query,{gameId='',editionUrl=''}={})=>{
+  const term=String(query||'').trim().replace(/\s+/g,' ').slice(0,160);
+  let linked=numericId(gameId)?String(gameId):'';
+  if(!linked&&editionUrl){
+   try{
+    const u=new URL(editionUrl);
+    const edition=u.protocol==='https:'&&u.hostname==='boardgameprices.co.uk'&&u.pathname.match(/^\/item\/show\/(\d+)(?:\/|$)/)?.[1];
+    if(edition)linked=await remember('edition:'+edition,async()=>{
+     const data=await fetchJson('https://boardgameprices.co.uk/api/info?'+new URLSearchParams({id:edition,sitename,currency:'EUR',destination:'GB',preferred_language:'ES'}));
+     if(!Array.isArray(data.items))throw Error('El catálogo no ha devuelto juegos válidos');
+     const id=data.items.find(x=>String(x.id)===edition)?.external_id;
+     return numericId(id)?String(id):'';
+    });
+   }catch{ /* Use an exact title when the older edition link is unavailable. */ }
+  }
+  const key=titleKey(term);
+  const matches=linked?(await discover('',linked)).filter(x=>x.id===linked):key?(await discover(term)).filter(x=>x.names.includes(key)):[];
+  if(matches.length!==1||!matches[0].minPlayers)return null;
+  const {id,minPlayers,maxPlayers}=matches[0];
+  return {gameId:id,minPlayers,maxPlayers};
+ };
+ return search;
 }

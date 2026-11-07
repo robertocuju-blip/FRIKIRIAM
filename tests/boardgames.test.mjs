@@ -81,3 +81,25 @@ test('el almacenamiento desactivado no impide buscar y las ediciones se distingu
  assert.equal(editionLabel({lang:['ES','PT'],version:['2025']}),'Español · Portugués · 2025');
  assert.equal(editionLabel(),'Edición sin idioma indicado');
 });
+
+test('el número de jugadores se identifica por título exacto o edición vinculada, sin adivinar',async()=>{
+ const calls=[];
+ const entities={
+  Q1:{labels:{en:{value:'Catan'}},aliases:{es:[{value:'Los colonos de Catán'}]},claims:{P2339:[claim('13')],P1872:[claim({amount:'+3'})],P1873:[claim({amount:'+4'})]}},
+  Q2:{labels:{en:{value:'Catan: Junior'}},claims:{P2339:[claim('125921')],P1872:[claim({amount:'+2'})],P1873:[claim({amount:'+4'})]}},
+ };
+ const search=createBoardGameCatalog({fetchJson:async endpoint=>{
+  const u=new URL(endpoint);calls.push(u);
+  if(u.hostname==='boardgameprices.co.uk')return {items:[item(949,'13','GB')]};
+  if(u.searchParams.get('action')==='wbgetentities')return {entities};
+  return {query:{search:[{title:'Q2'},{title:'Q1'}]}};
+ }});
+ const expected={gameId:'13',minPlayers:3,maxPlayers:4};
+ assert.deepEqual(await search.players('los COLONOS de catan'),expected);
+ assert.equal(await search.players('catan expansión'),null);
+ assert.deepEqual(await search.players('Juego de casa',{editionUrl:'https://boardgameprices.co.uk/item/show/949/catan'}),expected);
+ assert.deepEqual(await search.players('Nombre personalizado',{gameId:'13'}),expected);
+ assert.equal(calls.filter(u=>u.searchParams.get('srsearch')==='haswbstatement:P2339=13').length,1);
+ assert.equal(await search.players('Otro',{editionUrl:'https://example.org/item/show/949/catan'}),null);
+ assert.equal(calls.filter(u=>u.hostname==='boardgameprices.co.uk').length,1);
+});

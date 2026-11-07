@@ -1,40 +1,40 @@
-const encode=new TextEncoder(),decode=new TextDecoder();
-const token=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
-const bytes=value=>Uint8Array.from(atob(value.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0));
-export const validCode=code=>typeof code==='string'&&/^FK1-[A-Za-z0-9_-]{87}$/.test(code);
-const privateValid=key=>key?.kty==='EC'&&key.crv==='P-256'&&['d','x','y'].every(k=>/^[A-Za-z0-9_-]{43}$/.test(key[k]));
-export function validMessage(x){
- return x&&typeof x.id==='string'&&x.id.length<=64&&Number.isFinite(x.createdAt)&&typeof x.name==='string'&&x.name.length<=80&&typeof x.title==='string'&&x.title.trim()&&x.title.length<=160&&['book','show','movie','game'].includes(x.kind)&&typeof x.note==='string'&&x.note.length<=800;
+const appUrl='https://robertocuju-blip.github.io/FRIKIRIAM/';
+const kinds=new Set(['book','show','movie','game']);
+const limited=(v,max)=>typeof v==='string'&&v.length<=max;
+
+export function validMessage(m){
+ return !!m&&/^[a-zA-Z0-9_-]{1,80}$/.test(typeof m.id==='string'?m.id:'')&&kinds.has(m.kind)
+  &&limited(m.title,160)&&!!m.title.trim()&&limited(m.name,80)&&limited(m.note,800)
+  &&Number.isSafeInteger(m.createdAt)&&m.createdAt>=0&&m.createdAt<=8640000000000000;
 }
-export function validExchange(x){
- return x&&validCode(x.identity?.code)&&privateValid(x.identity?.key)&&Array.isArray(x.messages)&&x.messages.length<=1000&&x.messages.every(m=>validMessage(m)&&['received','prepared'].includes(m.direction)&&validCode(m.peer)&&(!m.packet||typeof m.packet==='string'&&m.packet.length<=7000));
+const messageOnly=({id,title,kind,name,note,createdAt})=>({id,title,kind,name,note,createdAt});
+
+export function normalizeRecommendations(messages){
+ if(!Array.isArray(messages))return [];
+ const unique=new Map();
+ for(const m of messages){
+  if(!validMessage(m)||!['prepared','received'].includes(m.direction))continue;
+  unique.set(m.direction+':'+m.id,{...messageOnly(m),direction:m.direction});
+ }
+ return [...unique.values()].slice(-1000);
 }
-export async function makeIdentity(){
- const pair=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveKey']);
- return {code:'FK1-'+token(await crypto.subtle.exportKey('raw',pair.publicKey)),key:await crypto.subtle.exportKey('jwk',pair.privateKey)};
+
+export function recommendationLink(message){
+ if(!validMessage(message))throw Error('Recomendación no válida');
+ const bytes=new TextEncoder().encode(JSON.stringify(messageOnly(message)));
+ const token=btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
+ return appUrl+'#rec=v2.'+token;
 }
-async function conversationKey(identity,peer){
- if(!validCode(peer)||!validCode(identity?.code)||!privateValid(identity?.key))throw Error('Código no válido');
- const alg={name:'ECDH',namedCurve:'P-256'};
- const privateKey=await crypto.subtle.importKey('jwk',identity.key,alg,false,['deriveKey']);
- const publicKey=await crypto.subtle.importKey('raw',bytes(peer.slice(4)),alg,false,[]);
- return crypto.subtle.deriveKey({name:'ECDH',public:publicKey},privateKey,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
-}
-const context=(from,to)=>encode.encode(`FRIKIRIAM|recomendación|1|${from}|${to}`);
-export async function sealRecommendation(identity,to,message){
- if(!validMessage(message)||to===identity.code)throw Error('Recomendación no válida');
- const key=await conversationKey(identity,to),iv=crypto.getRandomValues(new Uint8Array(12));
- const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:context(identity.code,to)},key,encode.encode(JSON.stringify(message)));
- return [identity.code,token(iv),token(cipher)].join('.');
-}
-export async function openRecommendation(identity,packet){
- if(typeof packet!=='string'||packet.length>7000)throw Error('Enlace no válido');
- const fields=packet.split('.'),[from,nonce,cipher]=fields;
- if(fields.length!==3||!validCode(from)||!/^[A-Za-z0-9_-]{16}$/.test(nonce)||!/^[A-Za-z0-9_-]+$/.test(cipher))throw Error('Enlace no válido');
- const key=await conversationKey(identity,from);
- const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(nonce),additionalData:context(from,identity.code)},key,bytes(cipher));
- const data=JSON.parse(decode.decode(plain));
- if(!validMessage(data))throw Error('Recomendación no válida');
- const {id,createdAt,name,title,kind,note}=data;
- return {id,createdAt,name,title,kind,note,peer:from,direction:'received'};
+
+export function readRecommendation(value){
+ try{
+  const url=new URL(value,appUrl), hash=url.hash;
+  if(!['http:','https:'].includes(url.protocol))return null;
+  if(/^#rec=FK1[-.]/.test(hash))return {legacy:true};
+  const token=hash.match(/^#rec=v2\.([\w-]{1,7000})$/)?.[1];
+  if(!token)return null;
+  const bytes=Uint8Array.from(atob(token.replaceAll('-','+').replaceAll('_','/')),ch=>ch.charCodeAt(0));
+  const message=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  return validMessage(message)?messageOnly(message):null;
+ }catch{return null;}
 }

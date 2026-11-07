@@ -1,7 +1,7 @@
-import {isMovie,mediaStatus,mergeCatalog,normalizeLibrary,newestFirst} from './media.mjs?v=20261107-1';
-import {createBoardGameCatalog} from './boardgames.mjs?v=20261107-1';
+import {isMovie,mediaStatus,mergeCatalog,normalizeLibrary,newestFirst} from './media.mjs?v=20261107-3';
+import {createBoardGameCatalog} from './boardgames.mjs?v=20261107-3';
 import {createMovieCatalog,imdbOf,movieDetails} from './movies.mjs?v=20261107-1';
-import {makeIdentity,validCode,validExchange,sealRecommendation,openRecommendation} from './recommendations.mjs?v=20261107-1';
+import {validMessage,recommendationLink,readRecommendation} from './recommendations.mjs?v=20261107-3';
 import {searchBooks,bookEditions} from './books.mjs?v=20261107-1';
 import {pausedStates,isPaused,formats,validRating,yearOf,bounded,labels,groupKey,groupNames,playersLabel,completionCount,changeSeason,suggestItem,libraryStats,translatedGenres} from './library.mjs?v=20261107-1';
 let catalogStorage=null;try{catalogStorage=localStorage}catch{}
@@ -13,7 +13,7 @@ const $ = (s, root = document) => root.querySelector(s);
 const KEY = 'frikiriam.v1';
 const fresh = () => ({version:2,profile:{name:''},books:[],shows:[],games:[],groups:[],activeSession:null});
 let state = fresh(), storageError = false, needsMigration = false;
-try { const raw=localStorage.getItem(KEY); if(raw){const data=JSON.parse(raw);validate(data);state=normalizeLibrary(data);needsMigration=data.version!==2} } catch { storageError=true; }
+try { const raw=localStorage.getItem(KEY); if(raw){const data=JSON.parse(raw);validate(data);state=normalizeLibrary(data);needsMigration=data.version!==2||!!data.exchange} } catch { storageError=true; }
 let view='home', filter='Todos', query='', lookupResults=[], lookupGeneration=0, typeFilter='Todos', catalogJob=null, catalogSingleRunning=false;
 const modal=$('#modal');
 const sections={books:'book',shows:'show',movies:'movie',games:'game'};
@@ -50,7 +50,7 @@ function validate(d){
  const text=(v)=>typeof v==='string'&&v.length<=100000;
  const rating=validRating;
  const ids=new Set();
- if(d.exchange!==undefined&&!validExchange(d.exchange))throw Error('Recomendaciones no válidas');
+ if(d.recommendations!==undefined&&(!Array.isArray(d.recommendations)||d.recommendations.length>1000||!d.recommendations.every(m=>validMessage(m)&&['received','prepared'].includes(m.direction))))throw Error('Recomendaciones no válidas');
  if(d.groups!==undefined&&(!Array.isArray(d.groups)||d.groups.length>1000||!d.groups.every(g=>typeof g==='string'&&g.length<=80)))throw Error('Grupos no válidos');
  for(const key of ['books','shows','games']){
   if(!Array.isArray(d[key])||d[key].length>10000)throw Error('Colección no válida');
@@ -76,6 +76,7 @@ function go(next){
  render();window.scrollTo({top:0,behavior:'instant'});
  if(next==='movies')enrichSaved('movie');
  if(next==='shows')enrichSaved('show');
+ if(next==='games')enrichGames();
 }
 function shell(content){return `<div class="layout"><aside class="sidebar"><a class="brand" href="#" data-view="home"><img src="./icon.svg" alt="" class="brand-logo"><span><strong>FRIKIRIAM</strong><small>TU PEQUEÑO UNIVERSO</small></span></a><div class="nav-label">Tu espacio personal</div><nav class="nav" aria-label="Navegación principal">${Object.entries(names).map(([key,title])=>`<button data-view="${key}" class="${view===key?'active':''}" ${view===key?'aria-current="page"':''}>${icon(key)}<span>${title}${japanese(jp[key],"nav-jp")}</span></button>`).join('')}</nav><div class="sidebar-bottom"><div class="zen-quote">Tus historias, a tu ritmo.<br>Siempre hay algo por descubrir.</div><button class="profile-mini" data-view="profile"><span class="avatar">${icon('profile')}</span><span><strong>${esc(state.profile.name||'Mi perfil')}</strong><small>Mi colección personal</small></span></button></div></aside><div class="workspace"><header class="topbar"><a class="header-brand" href="#" data-view="home"><img src="./icon.svg" alt=""><strong>FRIKIRIAM</strong></a><button class="header-profile" data-view="profile" aria-label="Ver mi perfil"><span class="header-name">${esc(state.profile.name||'Mi perfil')}</span></button></header>${!navigator.onLine?'<div class="online-warning">Sin conexión · Tu cuaderno sigue disponible. Las búsquedas necesitan internet.</div>':''}<main class="main">${content}<footer class="footer"><span>FRIKIRIAM · Un lugar para todo lo que te mueve.</span></footer></main></div></div>${state.activeSession?cozy():''}`}
 function render(){ $('#app').innerHTML=shell(view==='home'?home():view==='profile'?profile():view==='recommendations'?recommendations():collection());if(state.activeSession){$('.layout').inert=true;$('.cozy').setAttribute('role','dialog');$('.cozy').setAttribute('aria-modal','true');}if(storageError){storageError=false;toast('No se pudo leer el guardado anterior. No se sobrescribirá hasta tu próxima acción.')}}
@@ -103,7 +104,7 @@ function collection(){
   &&(!groupFilter||groupNames(x.groups).some(n=>groupKey(n)===groupKey(groupFilter)))&&(!formatFilter||x.format===formatFilter));
  const filtered=query||filter!=='Todos'||genreFilter||yearFilter||groupFilter||formatFilter;
  const filterSelect=(name,id,value,entries)=>`<label>${name}<select data-collection-filter="${id}" aria-label="${name}">${entries.map(([v,t])=>`<option value="${esc(v)}" ${String(v)===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
- const moreFilters=`<details class="extra-filters" ${genreFilter||yearFilter||groupFilter||formatFilter?'open':''}><summary>Género, año y grupos ${japanese("絞り込み")}</summary><div class="filter-grid">${view!=='games'?filterSelect('Género','genre',genreFilter,[['','Todos'],...genres.map(x=>[x,x]),['?','Sin género']]):''}${filterSelect('Año','year',yearFilter,[['','Todos'],...years.map(x=>[x,x]),['?','Sin año']])}${filterSelect('Grupo','group',groupFilter,[['','Todos'],...getGroups().map(x=>[x,x])])}${view==='books'?filterSelect('Formato de lectura','format',formatFilter,[['','Todos'],...formats.map(x=>[x,x])]):''}</div></details>`;
+ const moreFilters=`<details class="extra-filters" ${genreFilter||yearFilter||groupFilter||formatFilter?'open':''}><summary>${view==='games'?'Filtrar por grupo':'Género, año y grupos'} ${japanese("絞り込み")}</summary><div class="filter-grid">${view!=='games'?filterSelect('Género','genre',genreFilter,[['','Todos'],...genres.map(x=>[x,x]),['?','Sin género']]):''}${view==='games'?'':filterSelect('Año','year',yearFilter,[['','Todos'],...years.map(x=>[x,x]),['?','Sin año']])}${filterSelect('Grupo','group',groupFilter,[['','Todos'],...getGroups().map(x=>[x,x])])}${view==='books'?filterSelect('Formato de lectura','format',formatFilter,[['','Todos'],...formats.map(x=>[x,x])]):''}</div></details>`;
  const tabs=cfg[4].map(t=>`<button data-filter="${esc(t)}" class="${t===filter?'active':''}" aria-pressed="${t===filter}">${t}</button>`).join('');
  const types=view==='books'?['Cómics','Mangas','Libros','Novelas gráficas']:['Anime','Serie'];
  const categoryTabs=['books','shows'].includes(view)?`<div class="tabs media-types" aria-label="${view==='books'?'Categorías de lectura':'Tipo de serie'}">${types.map(t=>`<button data-type-filter="${t}" class="${typeFilter===t?'active':''}" aria-pressed="${typeFilter===t}">${view==='shows'?(t==='Anime'?'Animes':'Series'):t}</button>`).join('')}</div>`:'';
@@ -111,8 +112,9 @@ function collection(){
   (view==='shows'?`<div class="catalog-toolbar">${button(catalogJob?.running?'Actualizando catálogo…':'Actualizar todo el catálogo','refresh-all','subtle')}<span class="small">Actualiza episodios y emisión de todos los títulos vinculados a TVmaze.</span></div>${catalogJob?catalogProgress():'<div id="catalog-progress"></div>'}`:'')+categoryTabs+
   `<div class="collection-tools">${button("Sugerir","suggest","subtle")}${button("Grupos","groups","subtle")}</div><div class="toolbar"><div class="tabs" aria-label="Filtros de estado${view==='books'&&typeFilter!=='Todos'?' de '+esc(typeFilter):''}">${tabs}</div><input class="search-input" id="collection-search" type="search" placeholder="Buscar en mi colección…" aria-label="Buscar en mi colección" value="${esc(query)}"></div>${moreFilters}<div class="collection-options"><p class="collection-caption">${view==='books'&&typeFilter!=='Todos'?esc(typeFilter)+' · ':''}Más recientes primero</p><div class="view-switch" role="group" aria-label="Formato de la colección">${[['list','Lista'],['grid','Tarjetas']].map(([value,label])=>`<button type="button" data-action="set-layout" data-layout="${value}" aria-pressed="${layout===value}">${icon(value)} ${label}</button>`).join('')}</div></div><div id="collection-list">${list.length?`<div class="library-list ${layout==='grid'?'is-grid':''}">${list.map(card).join('')}</div>`:`<div class="panel">${empty(view,filtered?'Sin resultados por aquí.':{books:'Una estantería llena de posibilidades.',shows:'Una nueva historia está por empezar.',movies:'Una película para cada momento.',games:'Siempre hay sitio para otra partida.'}[view],filtered?'Prueba otro filtro o una búsqueda diferente.':'Añade tu primer registro y haz de este espacio algo tuyo.',button(`${icon('plus')} ${cfg[2]}`,cfg[3],'subtle'))}</div>`}</div>`;
 }
-function cover(x,kind){
- return `<button type="button" class="row-cover cover-open" aria-label="Abrir ${esc(x.title)}" data-action="edit-${kind}" data-id="${esc(x.id)}">${url(x.cover)?`<img src="${esc(url(x.cover))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-cover>`:''}<span class="row-cover-fallback">${icon(view)}</span></button>`;
+function cover(x,kind,clickable=true){
+ const content=`${url(x.cover)?`<img src="${esc(url(x.cover))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-cover>`:''}<span class="row-cover-fallback">${icon(view)}</span>`;
+ return clickable?`<button type="button" class="row-cover cover-open" aria-label="Abrir ${esc(x.title)}" data-action="edit-${kind}" data-id="${esc(x.id)}">${content}</button>`:`<div class="row-cover" aria-hidden="true">${content}</div>`;
 }
 function card(x){
  const kind=sections[view],status=itemStatus(x),genres=labels(x.genres).slice(0,3);
@@ -120,9 +122,9 @@ function card(x){
  if(kind==='book'){sub=x.author||'';details=[x.format,`${completionCount(x,kind)} lecturas completas`,x.sessions.length?time(totalTime(x)):'',x.price];}
  if(kind==='show'){details=[`${x.episodes.filter(e=>e.watched).length} / ${x.episodes.length} capítulos vistos`,x.airStatus==='En emisión'?'● En emisión':x.airStatus==='Finalizada'?'Emisión finalizada':'',x.checked?`Catálogo actualizado a ${date(x.checked)}`:''];}
  if(kind==='movie'){sub=x.synopsis||'';details=[`${completionCount(x,kind)} visionados`,x.runtime?`${x.runtime} min`:''];}
- if(kind==='game'){sub=x.notes?.slice(0,110)||'';details=[playersLabel(x.minPlayers,x.maxPlayers),x.price?(x.priceProvider==='BoardGamePrices'?`Desde ${x.price} · sin envío ni tasas`:`Precio: ${x.price}`):''];}
- const tags=groupNames(x.groups);
- return `<article class="library-row">${cover(x,kind)}<div class="row-info"><div class="row-labels">${tag(status,status==='Pendiente')}${stars(x.rating||(kind==='movie'?x.episodes[0]?.rating:0))}</div><h3>${esc(x.title)}</h3>${yearOf(x.year)||genres.length?`<p class="row-detail">${esc([yearOf(x.year),...genres].filter(Boolean).join(' · '))}</p>`:''}${sub?`<p class="row-summary">${esc(sub)}</p>`:''}${details.some(Boolean)?`<p class="row-detail">${esc(details.filter(Boolean).join(' · '))}</p>`:''}${tags.length?`<p class="row-detail">${esc(tags.join(' · '))}</p>`:''}${kind==='game'&&url(x.priceSourceUrl)?`<a class="row-source" href="${esc(url(x.priceSourceUrl))}" target="_blank" rel="noopener noreferrer">Ver ofertas ↗</a>`:''}${x.coverSourceUrl&&url(x.coverSourceUrl)?`<a class="row-source" href="${esc(url(x.coverSourceUrl))}" target="_blank" rel="noopener noreferrer">Imagen: ${esc(x.coverProvider||'fuente')} ↗</a>`:''}</div></article>`;
+ if(kind==='game'){sub=x.notes?.slice(0,110)||'';details=[gameDetails(x)];}
+ const tags=groupNames(x.groups),year=kind==='game'?null:yearOf(x.year);
+ return `<article class="library-row">${cover(x,kind,false)}<button type="button" class="card-hit" aria-label="Abrir ${esc(x.title)}" data-action="edit-${kind}" data-id="${esc(x.id)}"></button><div class="row-info"><div class="row-labels">${tag(status,status==='Pendiente')}${stars(x.rating||(kind==='movie'?x.episodes[0]?.rating:0))}</div><h3>${esc(x.title)}</h3>${kind!=='game'&&(year||genres.length)?`<p class="row-detail">${esc([year,...genres].filter(Boolean).join(' · '))}</p>`:''}${sub?`<p class="row-summary">${esc(sub)}</p>`:''}${kind==='game'?`<p class="row-detail" data-game-details="${esc(x.id)}" ${details[0]?'':'hidden'}>${esc(details[0])}</p>`:details.some(Boolean)?`<p class="row-detail">${esc(details.filter(Boolean).join(' · '))}</p>`:''}${tags.length?`<p class="row-detail">${esc(tags.join(' · '))}</p>`:''}${kind==='game'&&url(x.priceSourceUrl)?`<a class="row-source" href="${esc(url(x.priceSourceUrl))}" target="_blank" rel="noopener noreferrer">Ver ofertas ↗</a>`:''}${x.coverSourceUrl&&url(x.coverSourceUrl)?`<a class="row-source" href="${esc(url(x.coverSourceUrl))}" target="_blank" rel="noopener noreferrer">Imagen: ${esc(x.coverProvider||'fuente')} ↗</a>`:''}</div></article>`;
 }
 function options(values,current){return values.map(v=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('')}
 function field(label,name,value='',type='text',full=false){return `<label class="${full?'full':''}">${label}<input name="${name}" type="${type}" value="${esc(value)}" ${name==='title'?'required maxlength="160"':name==='newGroup'||name==='groupName'?'maxlength="80"':name==='cover'?'placeholder="https://…"':name==='name'?'maxlength="80" autocomplete="name"':name==='price'?'maxlength="80" placeholder="Ej.: 35,00 €"':''} ${type==='number'?'min="0" max="100000" step="1"':''}></label>`}
@@ -155,33 +157,32 @@ function edit(kind,id){
  if(kind==='movie')fields+=select('Estado','status',states.movie,x.id?mediaStatus(x):'Pendiente')+field('URL de portada · opcional','cover',x.cover,'url',true)+rating(x.rating||x.episodes?.[0]?.rating)+note(x.notes||x.episodes?.[0]?.notes,'Tu impresión de la película');
  if(kind==='game')fields+=select('Estado','status',states.game,x.status)+field('Precio de referencia · opcional','price',x.price)+field('URL de portada · opcional','cover',x.cover,'url',true)+`<p class="full small">Puedes escribir tu propio precio. El del catálogo corresponde al producto y no incluye envío ni posibles tasas.</p>`+rating(x.rating)+note(x.notes,'Tu experiencia de juego');
  const numeric=(label,key,value,min,max)=>`<label>${label}<input type="number" name="${key}" min="${min}" max="${max}" step="1" value="${esc(value??'')}"></label>`;
- fields+=numeric('Año de publicación o estreno','year',yearOf(x.year),1000,2100);
+ if(kind!=='game')fields+=numeric('Año de publicación o estreno','year',yearOf(x.year),1000,2100);
  if(kind!=='game')fields+=field('Géneros · separados por comas','genres',labels(x.genres).join(', '),'text',true);
  if(kind==='movie'||kind==='show')fields+=numeric(kind==='movie'?'Duración (minutos)':'Duración habitual del capítulo (minutos)','runtime',x.runtime,1,2000);
  if(kind==='movie')fields+=`<label class="full">Sinopsis breve<textarea name="synopsis" maxlength="1800">${esc(x.synopsis||'')}</textarea></label>`;
  if(kind==='book')fields+=field('Editorial','publisher',x.publisher)+field('ISBN','isbn',x.isbn)+field('Idioma de la edición','language',x.language);
  if(kind==='book'||kind==='movie')fields+=numeric(kind==='book'?'Veces leído':'Veces vista','completions',completionCount(x,kind),0,10000)+`<div class="completion-action">${button(kind==='book'?'Sumar una lectura':'Sumar un visionado','increment-completion','subtle')}</div>`;
- if(kind==='game')fields+=numeric('Jugadores mínimos','minPlayers',x.minPlayers,1,1000)+numeric('Jugadores máximos','maxPlayers',x.maxPlayers,1,1000)+`<label class="full own-game"><input type="checkbox" name="owned" ${x.owned===true?'checked':''}> Tengo este juego</label>`;
+ if(kind==='game')fields+=`<p class="full small" data-game-players>${gamePlayersText(x)}</p>`+`<label class="full own-game"><input type="checkbox" name="owned" ${x.owned===true?'checked':''}> Tengo este juego</label>`;
  fields+=groupFields(x);
  const shortcuts=x.id?`<div class="item-shortcuts">${kind==='book'?button('Iniciar sesión de lectura','read','green',id):kind==='show'?button('Temporadas y capítulos','episodes','green',id):''}${button('Recomendar','recommend-item','subtle',id).replace('data-id=',`data-kind="${kind}" data-id=`)}</div>`:'';
  const finder=x.id?`<details class="editor-catalog"><summary>Buscar en el catálogo</summary>${lookup(kind,x)}</details>`:lookup(kind,x);
  openModal(`${isNew?'Añadir':'Tu'} ${title}`,isNew?'Haz un pequeño espacio para algo que te gusta.':'Cada detalle forma parte de tu camino.',`${shortcuts}${finder}<form id="item-form" data-kind="${kind}" data-id="${esc(x.id||'')}"><div class="form-grid">${fields}</div><div class="actions">${x.id?button('Eliminar','delete','danger',x.id):''}<button type="button" class="btn" data-action="close">Cancelar</button><button type="submit" class="btn primary">Guardar ${title}</button></div></form>${kind==='book'&&x.id?`<div class="section-heading"><h2>Tu tiempo entre páginas</h2><span>${time(totalTime(x))}</span></div><div class="history">${x.sessions.length?x.sessions.slice().reverse().map(s=>`<div class="history-row"><span>${date(s.started)}${s.page?` · pág. ${s.page}`:''}</span><span>${time(s.duration)}</span></div>`).join(''):'<p class="small">Tu primera sesión de lectura aparecerá aquí.</p>'}</div>${url(x.sourceUrl)?`<p class="source"><a href="${esc(url(x.sourceUrl))}" target="_blank" rel="noopener noreferrer">Consultar catálogo y disponibilidad ↗</a>${x.priceChecked?` · precio consultado el ${date(x.priceChecked)}`:''}</p>`:''}`:''}`);
  modal.pending=null;modal.pendingPrice=null;editionBrowse=null;
+ if(kind==='game'&&x.id)enrichGamePlayers(x);
  if(kind==='movie'&&x.episodes?.some(e=>e.notes||e.rating)){modal.insertAdjacentHTML('beforeend',`<details class="legacy-notes"><summary>Apuntes del registro anterior</summary>${x.episodes.filter(e=>e.notes||e.rating).map(e=>`<div class="notice">${stars(e.rating)}<p class="notes">${esc(e.notes)}</p></div>`).join('')}</details>`);}
 }
 function saveItem(form){
  const f=new FormData(form),kind=form.dataset.kind,key=collectionKey[kind],old=state[key].find(x=>x.id===form.dataset.id),v=Object.fromEntries(f),title=v.title.trim();if(!title)return;
  if(v.cover&&!url(v.cover)){toast('La portada debe tener una dirección https:// válida.');return}
  if(v.sourceUrl&&!url(v.sourceUrl)){toast('El enlace debe empezar por https://.');return}
- const min=bounded(v.minPlayers,1,1000),max=bounded(v.maxPlayers,1,1000);
- if(kind==='game'&&((min==null)!==(max==null)||min>max)){toast('Indica el mínimo y el máximo de jugadores; el máximo debe ser igual o mayor.');return}
  const groups=groupNames([...f.getAll('groups'),v.newGroup||'']);
  const allGroups=groupNames([...getGroups(),...groups],1000);
- let x={...old,id:old?.id||uid(),addedAt:old?.addedAt||Date.now(),title,notes:v.notes||'',status:v.status||old?.status||'Pendiente',year:yearOf(v.year),genres:labels(v.genres),groups};
+ let x={...old,id:old?.id||uid(),addedAt:old?.addedAt||Date.now(),title,notes:v.notes||'',status:v.status||old?.status||'Pendiente',...(kind==='game'?{}:{year:yearOf(v.year),genres:labels(v.genres)}),groups};
  {const image=modal.pending?.cover===v.cover?modal.pending:null,sameCover=old?.cover===v.cover;Object.assign(x,{rating:Number(v.rating||0),cover:v.cover||'',coverSourceUrl:image?.sourceUrl||(sameCover?old?.coverSourceUrl:'')||'',coverProvider:image?.provider||(sameCover?old?.coverProvider:'')||''});}
  if(kind==='book')Object.assign(x,{author:v.author,category:v.category,page:Number(v.page)||0,price:v.price,sourceUrl:v.sourceUrl,sessions:old?.sessions||[],priceChecked:modal.pending?.priceChecked||old?.priceChecked||null,format:formats.includes(v.format)?v.format:'',publisher:v.publisher.trim().slice(0,200),isbn:v.isbn.trim().slice(0,30),language:v.language.trim().slice(0,35),editionId:modal.pending?.editionId||old?.editionId||'',completions:bounded(v.completions)??0});
  if(kind==='book'&&x.status==='Leído'&&!x.completions&&!completionCount(old||{},'book'))x.completions=1;
- if(kind==='game'){const amount=(v.price||'').trim(),price=modal.pendingPrice?.price===amount?modal.pendingPrice:old?.price===amount?old:null;Object.assign(x,{minPlayers:min,maxPlayers:max,owned:f.has('owned'),price:amount,priceProvider:amount&&price?.priceProvider||'',priceSourceUrl:amount&&price?.priceSourceUrl||'',priceChecked:amount&&price?.priceChecked||null});}
+ if(kind==='game'){const amount=(v.price||'').trim(),price=modal.pendingPrice?.price===amount?modal.pendingPrice:old?.price===amount?old:null;const picked=modal.pending?.gameId?modal.pending:null,same=old&&(picked?String(old.gameId||'')===picked.gameId||old.coverSourceUrl===picked.sourceUrl:old.title===title||old.gameId||old.coverSourceUrl),range=playersLabel(picked?.minPlayers,picked?.maxPlayers)?picked:same?old:null;Object.assign(x,{gameId:picked?.gameId||old?.gameId||'',minPlayers:range?.minPlayers??null,maxPlayers:range?.maxPlayers??null,owned:f.has('owned'),price:amount,priceProvider:amount&&price?.priceProvider||'',priceSourceUrl:amount&&price?.priceSourceUrl||'',priceChecked:amount&&price?.priceChecked||null});}
  if(kind==='movie'){
   const count=bounded(v.completions)??0;
   x.completions=v.status==='Vista'&&!count&&!completionCount(old||{},kind)?1:count;
@@ -197,7 +198,44 @@ function saveItem(form){
  }
  state.groups=allGroups;
  if(old)state[key][state[key].indexOf(old)]=x;else state[key].push(x);
- if(persist()){modal.close();render();toast('Guardado en tu cuaderno.');if(kind==='show'&&!x.episodes.length)episodes(x.id)}
+ if(persist()){modal.close();render();toast('Guardado en tu cuaderno.');if(kind==='show'&&!x.episodes.length)episodes(x.id);if(kind==='game')enrichGamePlayers(x)}
+}
+function gamePlayersText(x){
+ const range=playersLabel(x.minPlayers,x.maxPlayers);
+ return range?`El catálogo indica ${range}.`:x.title?'Número de jugadores no disponible en el catálogo.':'El número de jugadores se rellena desde el catálogo.';
+}
+function gameDetails(x){
+ return [playersLabel(x.minPlayers,x.maxPlayers),x.price?(x.priceProvider==='BoardGamePrices'?`Desde ${x.price} · sin envío ni tasas`:`Precio: ${x.price}`):''].filter(Boolean).join(' · ');
+}
+const gamePlayerJobs=new Map();
+function enrichGamePlayers(item){
+ if(!navigator.onLine||playersLabel(item.minPlayers,item.maxPlayers))return;
+ const form=()=>{const current=$('#item-form',modal);return state.games.includes(item)&&modal.open&&current?.dataset.kind==='game'&&current.dataset.id===item.id&&!modal.pending?current:null;};
+ const current=form(),label=current&&$('[data-game-players]',current);
+ if(label)label.textContent='Buscando el número de jugadores…';
+ if(gamePlayerJobs.has(item))return gamePlayerJobs.get(item);
+ const job=searchBoardGames.players(item.title,{gameId:item.gameId,editionUrl:item.coverSourceUrl||item.priceSourceUrl}).then(range=>{
+  if(!range||!state.games.includes(item))return;
+  Object.assign(item,range);persist();
+  const details=view==='games'&&$('[data-game-details="'+CSS.escape(item.id)+'"]');
+  if(details){details.textContent=gameDetails(item);details.hidden=false;}
+ }).catch(()=>{}).finally(()=>{
+  const current=form(),label=current&&$('[data-game-players]',current);
+  if(label)label.textContent=gamePlayersText(item);
+  gamePlayerJobs.delete(item);
+ });
+ gamePlayerJobs.set(item,job);
+ return job;
+}
+let enrichingGames=false;
+async function enrichGames(){
+ if(enrichingGames||!navigator.onLine)return;
+ enrichingGames=true;
+ try{
+  const items=newestFirst(state.games).filter(x=>!playersLabel(x.minPlayers,x.maxPlayers));let i=0;
+  const worker=async()=>{while(view==='games'&&i<items.length){const item=items[i++];if(state.games.includes(item))await enrichGamePlayers(item);}};
+  await Promise.all([worker(),worker()]);
+ }finally{enrichingGames=false;}
 }
 async function jsonFetch(endpoint){const response=await fetch(endpoint,{signal:AbortSignal.timeout(15000)});if(!response.ok){const error=Error(`Catálogo no disponible (${response.status})`);error.status=response.status;throw error};return response.json()}
 async function searchCatalog(kind){
@@ -224,7 +262,7 @@ async function searchCatalog(kind){
 }
 function paintLookup(kind){
  const target=$('#lookup-results',modal);if(!target)return;
- target.innerHTML=lookupResults.length?lookupResults.map((x,i)=>`<div class="lookup-entry"><button type="button" class="lookup-result" data-action="choose-result" data-index="${i}" data-kind="${kind}">${url(x.cover)?`<img src="${esc(url(x.cover))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<span><strong>${esc(x.title)}</strong><small>${esc([x.author,x.subtitle,x.publisher,x.language,x.isbn?'ISBN '+x.isbn:'',x.year&&!x.subtitle?x.year:'',playersLabel(x.minPlayers,x.maxPlayers),x.provider,x.price?(kind==='game'?'Desde ':'')+x.price:kind==='game'?'Sin precio disponible':'',!url(x.cover)?'Sin portada':''].filter(Boolean).join(' · '))}</small></span></button>${kind==='book'&&x.workKey&&!editionBrowse?`<button type="button" class="btn subtle" data-action="book-editions" data-index="${i}">Ver ediciones</button>`:''}</div>`).join(''):'No se han encontrado coincidencias. Prueba el título original o añade el registro a mano.';
+ target.innerHTML=lookupResults.length?lookupResults.map((x,i)=>`<div class="lookup-entry"><button type="button" class="lookup-result" data-action="choose-result" data-index="${i}" data-kind="${kind}">${url(x.cover)?`<img src="${esc(url(x.cover))}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<span><strong>${esc(x.title)}</strong><small>${esc([x.author,x.subtitle,x.publisher,x.language,x.isbn?'ISBN '+x.isbn:'',kind!=='game'&&x.year&&!x.subtitle?x.year:'',playersLabel(x.minPlayers,x.maxPlayers),x.provider,x.price?(kind==='game'?'Desde ':'')+x.price:kind==='game'?'Sin precio disponible':'',!url(x.cover)?'Sin portada':''].filter(Boolean).join(' · '))}</small></span></button>${kind==='book'&&x.workKey&&!editionBrowse?`<button type="button" class="btn subtle" data-action="book-editions" data-index="${i}">Ver ediciones</button>`:''}</div>`).join(''):'No se han encontrado coincidencias. Prueba el título original o añade el registro a mano.';
  if(editionBrowse)target.insertAdjacentHTML('afterbegin',`<div class="actions">${button('Volver a resultados','book-editions-back','subtle')}${editionBrowse.more?button('Más ediciones','book-editions-next','subtle'):''}</div>`);
 }
 async function showEditions(item,offset=0){
@@ -255,13 +293,14 @@ async function chooseResult(index,kind){
  }
  const keys=existing?['cover']:['title','author','cover','price','sourceUrl','category','airStatus'];
  if(kind==='book'){keys.push('publisher','isbn','language');if(existing&&x.sourceUrl)keys.push('sourceUrl');}
- for(const key of ['year','runtime','synopsis','genres','minPlayers','maxPlayers']){
+ for(const key of ['year','runtime','synopsis','genres']){
   const input=form.elements[key],value=key==='genres'?labels(x.genres).join(', '):x[key];
   if(input&&value&&(!existing||!input.value))input.value=value;
  }
  for(const key of keys)if(x[key]!==undefined&&form.elements[key]&&(key!=='cover'||url(x.cover)))form.elements[key].value=x[key];
  if(kind==='game'&&(!existing||!form.elements.price.value.trim()||form.elements.price.value===modal.pendingPrice?.price))applyGamePrice(x,form);
  modal.pending={...x,linkCatalog};
+ if(kind==='game')$('[data-game-players]',form).textContent=gamePlayersText(x);
  $('#lookup-results',modal).innerHTML=`<div class="chosen-cover">${url(x.cover)?`<img src="${esc(url(x.cover))}" alt="Portada elegida" referrerpolicy="no-referrer">`:''}<div><p>${linkCatalog?'Catálogo seleccionado. Se conservarán tus apuntes y capítulos vistos.':existing?'Nueva portada seleccionada.':`«${esc(x.title)}» seleccionado.`}${(!existing||linkCatalog)&&x.episodes?` ${x.episodes.length} capítulos encontrados.`:''} Pulsa Guardar para aplicarlo.</p><p class="source">Datos de <a href="${esc(url(x.sourceUrl))}" target="_blank" rel="noopener noreferrer">${esc(x.provider)}</a>${x.provider==='TVmaze'?' · CC BY-SA 4.0':''}</p>${kind==='game'&&x.price?`<p>Desde ${esc(x.price)} · sin envío ni tasas${x.priceChecked?` · Consulta: ${date(x.priceChecked)}`:''}</p><button type="button" class="btn subtle" data-action="use-game-price" data-index="${index}">Usar este precio</button>`:''}</div></div>`;
 }
 function applyGamePrice(item,form){form.elements.price.value=item.price||'';modal.pendingPrice=item.price?{price:item.price,priceChecked:item.priceChecked,priceProvider:'BoardGamePrices',priceSourceUrl:item.sourceUrl}:null;}
@@ -350,7 +389,7 @@ function suggestGameDialog(){
 function showSuggestion(kind,players=null,exclude){
  const source=state[collectionKey[kind]]?.filter(x=>kind==='movie'?isMovie(x):kind==='show'?!isMovie(x):true)||[];
  const item=suggestItem(source,kind,{players,exclude,status:x=>['show','movie'].includes(kind)?mediaStatus(x):x.status});
- if(!item){openModal('Por ahora no hay sugerencias',kind==='game'?`No hay juegos propios y jugados compatibles con ${players} jugadores. Puedes revisar la propiedad y el rango de jugadores en sus fichas.`:'No hay títulos pendientes en esta colección.',`<div class="actions">${kind==='game'?button('Cambiar jugadores','suggest','subtle'):''}${button('Listo','close','primary')}</div>`);return}
+ if(!item){openModal('Por ahora no hay sugerencias',kind==='game'?`No hay juegos propios y jugados compatibles con ${players} jugadores. Solo se incluyen juegos cuyo número de jugadores figura en el catálogo.`:'No hay títulos pendientes en esta colección.',`<div class="actions">${kind==='game'?button('Cambiar jugadores','suggest','subtle'):''}${button('Listo','close','primary')}</div>`);return}
  openModal('Una sugerencia para ti',kind==='game'?playersLabel(item.minPlayers,item.maxPlayers):kinds[kind],`<article class="suggestion-item">${cover(item,kind)}<div><h3>${esc(item.title)}</h3>${item.synopsis?`<p class="small">${esc(item.synopsis)}</p>`:''}</div></article><div class="actions"><button type="button" class="btn subtle" data-action="suggest-again" data-kind="${kind}" data-players="${players||''}" data-id="${esc(item.id)}">Sugerir otro</button>${button('Abrir ficha','edit-'+kind,'primary',item.id)}</div>`);
 }
 function bulkMovies(){
@@ -409,62 +448,42 @@ async function enrichSaved(kind){
  if(changed&&persist()&&view===matching&&!modal.open&&!document.activeElement?.matches('input,select'))render();
 }
 
-const publicApp='https://robertocuju-blip.github.io/FRIKIRIAM/';
-const shareLink=packet=>`${publicApp}#rec=${packet}`;
-const threadLabel=m=>m.direction==='received'?'Recibida':'Enlace preparado';
 function recommendations(){
- const exchange=state.exchange, messages=exchange?.messages||[];
- const account=exchange?`<label>Tu código personal<input id="my-rec-code" readonly value="${esc(exchange.identity.code)}"></label><div class="actions">${button('Copiar mi código','copy-rec-code','subtle')}${button('Preparar recomendación','compose-rec','primary')}</div>`:`<p class="small">Crea un código y compártelo con tus amigos para que puedan enviarte recomendaciones cifradas por enlace.</p>${button('Crear mi código','create-rec-code','primary')}`;
- return heading('Recomendaciones.','Comparte títulos con tus amigos y guarda lo que te recomienden.')+`<div class="rec-panels"><section class="panel padded"><h2>Tu código ${japanese("コード")}</h2>${account}<p class="small">Las recomendaciones se comparten por enlace. Puedes responder y consultar el historial en este dispositivo.</p></section><section class="panel padded"><h2>Recibir un enlace</h2><form id="receive-rec-form"><label>Enlace de la recomendación<input type="text" name="link" maxlength="7200" required></label><div class="actions"><button type="submit" class="btn">Abrir enlace</button></div></form></section></div><section class="panel padded rec-history"><h2>Historial ${japanese("履歴")}</h2>${messages.length?[...messages].reverse().map(recCard).join(''):'<p class="small">Aquí aparecerán tus recomendaciones guardadas y preparadas.</p>'}</section>`;
+ const messages=state.recommendations||[];
+ return heading('Recomendaciones.','Comparte títulos con tus amigos y guarda lo que te recomienden.')+`<div class="rec-panels"><section class="panel padded"><h2>Compartir ${japanese("共有")}</h2><p class="small">Elige un título y comparte el enlace por WhatsApp o donde prefieras. Tu amigo podrá abrirlo y guardarlo en sus recomendaciones.</p>${button('Preparar recomendación','compose-rec','primary')}</section><section class="panel padded"><h2>Recibir un enlace</h2><p class="small">Si el enlace se abrió en otro navegador, pégalo aquí para guardarlo en esta instalación.</p><form id="receive-rec-form"><label>Enlace de la recomendación<input type="text" name="link" maxlength="7200" required></label><div class="actions"><button type="submit" class="btn">Abrir enlace</button></div></form></section></div><section class="panel padded rec-history"><h2>Historial ${japanese("履歴")}</h2>${messages.length?[...messages].reverse().map(recCard).join(''):'<p class="small">Aquí aparecerán tus recomendaciones guardadas y preparadas.</p>'}</section>`;
 }
 function recCard(m){
- return `<article class="rec-message"><span class="tag">${threadLabel(m)} · ${esc(kinds[m.kind])}</span><h3>${esc(m.title)}</h3><p class="small">${m.direction==='received'?'De '+esc(m.name)+' · ':''}${date(m.createdAt)}</p>${m.note?`<p class="notes">${esc(m.note)}</p>`:''}<div class="rec-actions"><button type="button" class="btn subtle" data-action="rec-thread" data-peer="${esc(m.peer)}">Conversación</button>${m.direction==='received'?`<button type="button" class="btn subtle" data-action="rec-to-library" data-id="${esc(m.id)}" data-peer="${esc(m.peer)}">Añadir a mi biblioteca</button>`:''}${m.packet?`<button type="button" class="btn subtle" data-action="rec-link-again" data-id="${esc(m.id)}">Volver a compartir</button>`:''}</div></article>`;
+ const received=m.direction==='received';
+ return `<article class="rec-message"><span class="tag">${received?'Recibida':'Enlace preparado'} · ${esc(kinds[m.kind])}</span><h3>${esc(m.title)}</h3><p class="small">${received?'De '+esc(m.name)+' · ':''}${date(m.createdAt)}</p>${m.note?`<p class="notes">${esc(m.note)}</p>`:''}<div class="rec-actions">${received?button('Añadir a mi biblioteca','rec-to-library','subtle',m.id):button('Volver a compartir','rec-link-again','subtle',m.id)}</div></article>`;
 }
-async function ensureIdentity(){
- if(state.exchange)return state.exchange.identity;
- const identity=await makeIdentity();
- if(!state.exchange){state.exchange={identity,messages:[]};if(!persist()){delete state.exchange;throw Error('No se pudo guardar el código');}}
- return state.exchange.identity;
-}
-function composeRec({title='',kind='book',peer=''}={}){
+function composeRec({title='',kind='book'}={}){
  const opts=Object.entries(kinds).map(([k,v])=>`<option value="${k}" ${k===kind?'selected':''}>${v}</option>`).join('');
- openModal('Preparar recomendación','Pega el código personal que te haya compartido tu amigo.',`<form id="compose-rec-form"><div class="form-grid">${field('Título','title',title,'text',true)}<label>Tipo<select name="kind">${opts}</select></label><label class="full">Código del destinatario<input name="peer" maxlength="91" required value="${esc(peer)}" autocomplete="off" autocapitalize="none" spellcheck="false"></label><label class="full">Tu mensaje · opcional<textarea name="note" maxlength="800"></textarea></label></div><div class="actions"><button type="submit" class="btn primary">Preparar enlace</button></div></form>`);
+ openModal('Preparar recomendación','Comparte un título con un amigo.',`<form id="compose-rec-form"><div class="form-grid">${field('Título','title',title,'text',true)}<label>Tipo<select name="kind">${opts}</select></label><label class="full">Tu mensaje · opcional<textarea name="note" maxlength="800"></textarea></label></div><div class="actions"><button type="submit" class="btn primary">Preparar enlace</button></div></form>`);
 }
-async function prepareRec(form){
- const f=new FormData(form),peer=String(f.get('peer')).trim(),send=form.querySelector('button[type="submit"]'),generation=lookupGeneration;
- const message={id:uid(),createdAt:Date.now(),name:state.profile.name||'Usuario de FRIKIRIAM',title:String(f.get('title')).trim(),kind:f.get('kind'),note:String(f.get('note')).trim()};
- if(!validCode(peer)){toast('Pega el código personal completo del destinatario.');return;}
- send.disabled=true;
- try{
-  const identity=await ensureIdentity(),packet=await sealRecommendation(identity,peer,message);
-  if(generation!==lookupGeneration||!modal.open)return;
-  const saved={...message,peer,direction:'prepared',packet};state.exchange.messages=[...state.exchange.messages,saved].slice(-1000);
-  if(persist()){if(view==='recommendations')render();recLink(saved);}
- }catch{toast('No se pudo preparar el enlace. Revisa el código del destinatario.');}
- finally{send.disabled=false;}
+function saveRecommendation(message,direction){
+ const previous=state.recommendations;
+ state.recommendations=[...(previous||[]),{...message,direction}].slice(-1000);
+ if(persist())return true;
+ state.recommendations=previous;return false;
+}
+function prepareRec(form){
+ const f=new FormData(form),message={id:uid(),createdAt:Date.now(),name:state.profile.name||'Usuario de FRIKIRIAM',title:String(f.get('title')).trim(),kind:f.get('kind'),note:String(f.get('note')).trim()};
+ if(!validMessage(message)){toast('Escribe un título para la recomendación.');return;}
+ if(saveRecommendation(message,'prepared')){if(view==='recommendations')render();recLink(message);}
 }
 function recLink(m){
- if(!m?.packet)return;
- openModal('Enlace preparado','Compártelo con el destinatario. Su código permite abrirlo en FRIKIRIAM.',`<label>Enlace de la recomendación<input id="prepared-rec-link" type="text" readonly value="${esc(shareLink(m.packet))}"></label><div class="actions">${button('Copiar enlace','copy-rec-link','subtle')}${button('Compartir enlace','share-rec-link','primary')}</div>`);
+ if(!m)return;
+ const link=recommendationLink(m),whatsapp='https://wa.me/?text='+encodeURIComponent('Te recomiendo «'+m.title+'» en FRIKIRIAM:\n'+link);
+ openModal('Enlace preparado','Quien tenga este enlace podrá leer el título y tu mensaje.',`<label>Enlace de la recomendación<input id="prepared-rec-link" type="text" readonly value="${esc(link)}"></label><div class="actions">${button('Copiar enlace','copy-rec-link','subtle')}${navigator.share?button('Compartir…','share-rec-link','subtle'):''}<a class="btn primary" href="${esc(whatsapp)}" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a></div>`);
 }
-async function receiveRec(value,fromLocation=false){
- let packet;try{packet=new URL(value,location.href).hash.match(/^#rec=([A-Za-z0-9_.-]+)$/)?.[1];}catch{}
- if(!packet){toast('El enlace de recomendación no es válido.');return;}
- if(fromLocation)history.replaceState(null,'',location.pathname+location.search);
- go('recommendations');
- if(!state.exchange){toast('Abre el enlace en el dispositivo y la app donde creaste el código del destinatario.');return;}
- try{
-  const message=await openRecommendation(state.exchange.identity,packet);
-  if(view!=='recommendations')return;
-  if(state.exchange.messages.some(m=>m.id===message.id&&m.peer===message.peer&&m.direction==='received')){toast('Esta recomendación ya está guardada.');return;}
-  openModal(esc(message.title),`Recomendación de ${esc(message.name)} · ${kinds[message.kind]}`,`<p class="notes">${esc(message.note)}</p><div class="actions">${button('Cancelar','close')}${button('Guardar recomendación','save-rec','primary')}</div>`);
-  modal.incoming=message;
- }catch{toast('No se puede abrir con tu código. Usa el dispositivo con el que lo creaste y comprueba el enlace.');}
-}
-function recThread(peer){
- if(!state.exchange||!validCode(peer))return;
- const list=state.exchange.messages.filter(m=>m.peer===peer),last=list.at(-1);
- openModal('Conversación',last?.direction==='received'?esc(last.name):'Recomendaciones con este código',`<div class="rec-thread">${list.map(m=>`<article class="rec-message"><span class="tag">${threadLabel(m)} · ${date(m.createdAt)}</span><h3>${esc(m.title)}</h3><p class="notes">${esc(m.note)}</p></article>`).join('')}</div><div class="actions"><button type="button" class="btn primary" data-action="reply-rec" data-peer="${esc(peer)}">Responder con enlace</button></div>`);
+function receiveRec(value,fromLocation=false){
+ const message=readRecommendation(value);
+ if(fromLocation){history.replaceState(null,'',location.pathname+location.search);go('recommendations');}
+ if(!message||message.legacy){toast(message?.legacy?'Este enlace es de la versión anterior. Pide que te lo compartan de nuevo.':'El enlace de recomendación no es válido.');return;}
+ if(!fromLocation)go('recommendations');
+ if(state.recommendations?.some(m=>m.id===message.id&&m.direction==='received')){toast('Esta recomendación ya está guardada.');return;}
+ openModal(esc(message.title),`Recomendación de ${esc(message.name)} · ${kinds[message.kind]}`,`<p class="notes">${esc(message.note)}</p><div class="actions">${button('Cancelar','close')}${button('Guardar recomendación','save-rec','primary')}</div>`);
+ modal.incoming=message;
 }
 function exportBackup(){const blob=new Blob([JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'}),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=`frikiriam-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(href),10000);toast('Copia preparada. Guárdala en un lugar seguro.')}
 function importBackup(){const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{const f=input.files[0];if(!f)return;if(f.size>20*1024*1024){toast('La copia supera el límite de 20 MB.');return}try{const data=JSON.parse(await f.text());validate(data);openModal('Restaurar tu cuaderno',`${data.books.length} lecturas · ${data.shows.filter(x=>!isMovie(x)).length} series · ${data.shows.filter(isMovie).length} películas · ${data.games.length} juegos`,`<p class="small">La copia de ${esc(data.profile.name||'tu perfil')} sustituirá los datos de este dispositivo. Exporta primero el cuaderno actual si quieres conservarlo.</p><div class="actions">${button('Exportar cuaderno actual','export')}${button('Cancelar','close')}${button('Restaurar copia','confirm-import','primary')}</div>`);modal.backup=normalizeLibrary(data)}catch{toast('El archivo no es una copia válida de FRIKIRIAM. No se han cambiado tus datos.')}};input.click()}
@@ -515,21 +534,18 @@ document.addEventListener('click',async event=>{
  else if(action==='book-editions')showEditions(lookupResults[Number(target.dataset.index)]);
  else if(action==='book-editions-back'){lookupResults=editionBrowse.original;editionBrowse=null;paintLookup('book');}
  else if(action==='book-editions-next')showEditions(editionBrowse.item,editionBrowse.offset+20);
- else if(action==='create-rec-code'){target.disabled=true;try{await ensureIdentity();render();}catch{target.disabled=false;toast('No se pudo crear tu código. Abre la app por HTTPS.');}}
- else if(action==='copy-rec-code'||action==='copy-rec-link'||action==='share-rec-link'){
-  const input=$(action==='copy-rec-code'?'#my-rec-code':'#prepared-rec-link');
-  if(input){try{if(action==='share-rec-link'&&navigator.share)await navigator.share({title:'Recomendación de FRIKIRIAM',url:input.value});else{await navigator.clipboard.writeText(input.value);toast('Copiado.');}}catch(e){if(e.name!=='AbortError'){input.focus();input.select();toast('Copia el texto seleccionado.');}}}
+ else if(action==='copy-rec-link'||action==='share-rec-link'){
+  const input=$('#prepared-rec-link');
+  if(input){try{if(action==='share-rec-link'&&navigator.share)await navigator.share({title:'Recomendación de FRIKIRIAM',url:input.value});else{await navigator.clipboard.writeText(input.value);toast('Enlace copiado.');}}catch(e){if(e.name!=='AbortError'){input.focus();input.select();toast('Copia el enlace seleccionado.');}}}
  }
  else if(action==='recommend-item'){const kind=target.dataset.kind,item=state[collectionKey[kind]]?.find(x=>x.id===id);if(item)composeRec({kind,title:item.title});}
  else if(action==='compose-rec')composeRec();
- else if(action==='rec-link-again')recLink(state.exchange?.messages.find(m=>m.id===id&&m.direction==='prepared'));
- else if(action==='rec-thread')recThread(target.dataset.peer);
- else if(action==='reply-rec'){const last=state.exchange?.messages.filter(m=>m.peer===target.dataset.peer).at(-1);composeRec({peer:target.dataset.peer,title:last?.title,kind:last?.kind});}
- else if(action==='rec-to-library'){const m=state.exchange?.messages.find(m=>m.id===id&&m.peer===target.dataset.peer&&m.direction==='received');if(m){edit(m.kind);$('[name="title"]',modal).value=m.title;}}
+ else if(action==='rec-link-again')recLink(state.recommendations?.find(m=>m.id===id&&m.direction==='prepared'));
+ else if(action==='rec-to-library'){const m=state.recommendations?.find(m=>m.id===id&&m.direction==='received');if(m){edit(m.kind);$('[name="title"]',modal).value=m.title;$('#lookup-query',modal).value=m.title;}}
  else if(action==='save-rec'){
-  const m=modal.incoming;if(!m||!state.exchange)return;
-  if(!state.exchange.messages.some(x=>x.direction==='received'&&x.id===m.id&&x.peer===m.peer))state.exchange.messages=[...state.exchange.messages,m].slice(-1000);
-  if(persist()){modal.close();render();toast('Recomendación guardada.');}
+  const m=modal.incoming;if(!m)return;
+  if(state.recommendations?.some(x=>x.direction==='received'&&x.id===m.id)){modal.close();toast('Esta recomendación ya está guardada.');return;}
+  if(saveRecommendation(m,'received')){modal.incoming=null;modal.close();render();toast('Recomendación guardada.');}
  }
  else if(action==='export')exportBackup();
  else if(action==='import')importBackup();

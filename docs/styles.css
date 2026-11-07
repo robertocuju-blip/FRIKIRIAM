@@ -241,3 +241,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulati
  .rec-panels{grid-template-columns:1fr}
 }
 @media(max-width:380px){.library-row{grid-template-columns:60px minmax(0,1fr)}}
+
+.library-row{position:relative}
+.card-hit{position:absolute;inset:0;z-index:1;border:0;border-radius:inherit;padding:0;background:transparent;cursor:pointer}
+.card-hit:focus-visible{outline:2px solid var(--red);outline-offset:-3px}
+.library-row .row-source{position:relative;z-index:2}
