@@ -1,7 +1,11 @@
+import {isPaused} from './library.mjs?v=20261107-1';
+
 export const isMovie = item => item.category === 'Película';
 
 export function mediaStatus(item) {
+  if (isPaused(item)) return item.status;
   if (isMovie(item)) {
+    if (Number.isInteger(item.completions)) return item.completions>0?'Vista':'Pendiente';
     if (item.status === 'Vista' || item.status === 'Visto') return 'Vista';
     return item.episodes.some(episode => episode.watched) ? 'Vista' : 'Pendiente';
   }
@@ -20,8 +24,9 @@ export function mergeCatalog(item, show, incoming, now = Date.now()) {
     if (existing) {
       existing.title = data.name || `Capítulo ${data.number}`;
       existing.airdate = data.airdate || '';
+      if(data.runtime>0)existing.runtime=data.runtime;
     } else {
-      episodes.push({id, season:data.season, number:data.number, title:data.name || `Capítulo ${data.number}`, airdate:data.airdate || '', watched:false, rating:0, notes:''});
+      episodes.push({id, season:data.season, number:data.number, title:data.name || `Capítulo ${data.number}`, airdate:data.airdate || '', watched:false, rating:0, notes:'', ...(data.runtime>0?{runtime:data.runtime}:{})});
       added++;
     }
   }
@@ -34,7 +39,7 @@ export function mergeCatalog(item, show, incoming, now = Date.now()) {
 // Array position is the only reliable creation order in older backups.
 export function normalizeLibrary(data) {
   const collection = items => items.map((item,index) => ({...item,addedAt:Number.isFinite(item.addedAt) && item.addedAt > 0 ? item.addedAt : index + 1}));
-  return {version:2,profile:{name:data.profile.name},books:collection(data.books),shows:collection(data.shows),games:collection(data.games),activeSession:data.activeSession};
+  return {version:2,profile:{name:data.profile.name},books:collection(data.books),shows:collection(data.shows),games:collection(data.games),activeSession:data.activeSession,...(Array.isArray(data.groups)?{groups:data.groups}:{}),...(data.exchange?{exchange:data.exchange}:{})};
 }
 
 export function newestFirst(items) {
